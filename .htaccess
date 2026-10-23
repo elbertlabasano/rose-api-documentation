@@ -1,0 +1,11 @@
+Options -Indexes -MultiViews
+
+# Keep this file outside Apache's document root. Change for your server.
+SetEnv DOCS_AUTH_FILE "C:/xampp/security/rose-docs.htpasswd"
+
+RewriteEngine On
+# Pass Basic credentials through to PHP, including FastCGI installations.
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteRule ^gateway\.php$ - [END]
+# Protect the UI, raw specifications, and every other request.
+RewriteRule ^ gateway.php [END]

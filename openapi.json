@@ -1,0 +1,720 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Rose Bakeshop SSO ? Keycloak User Administration",
+    "version": "1.0.0",
+    "description": "Selected Keycloak Admin REST API operations for creating/editing users, setting passwords, and activating/deactivating users. Base URL is supplied by the owner; deployed Keycloak version, realm, permissions, and proxy path are not verified. Replace YOUR_REALM with your realm name. Obtain a service account token, then use Authorize with its access_token. Administrative operations affect real users when executed.",
+    "license": {
+      "name": "Project documentation"
+    }
+  },
+  "servers": [
+    {
+      "url": "https://sso.rosebakeshop.net",
+      "description": "Rose Bakeshop SSO (deployment path unverified)"
+    }
+  ],
+  "tags": [
+    {
+      "name": "Authentication"
+    },
+    {
+      "name": "Users"
+    },
+    {
+      "name": "Passwords"
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/realms/{realm}/protocol/openid-connect/token": {
+      "parameters": [
+        {
+          "name": "realm",
+          "in": "path",
+          "required": true,
+          "description": "Realm name, not its internal ID. Replace YOUR_REALM with your actual realm.",
+          "schema": {
+            "type": "string"
+          },
+          "example": "YOUR_REALM"
+        }
+      ],
+      "post": {
+        "tags": [
+          "Authentication"
+        ],
+        "operationId": "getServiceAccountToken",
+        "summary": "Get an admin service account access token",
+        "description": "Requires a confidential client with service accounts enabled and appropriate realm-management roles. The token realm is the realm containing that client. Copy access_token into Authorize. Keep client secrets on a trusted machine/backend.",
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/x-www-form-urlencoded": {
+              "schema": {
+                "type": "object",
+                "required": [
+                  "grant_type",
+                  "client_id",
+                  "client_secret"
+                ],
+                "properties": {
+                  "grant_type": {
+                    "type": "string",
+                    "enum": [
+                      "client_credentials"
+                    ],
+                    "default": "client_credentials"
+                  },
+                  "client_id": {
+                    "type": "string",
+                    "example": "user-management-service"
+                  },
+                  "client_secret": {
+                    "type": "string",
+                    "format": "password"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "Access token issued",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TokenResponse"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid grant or request"
+          },
+          "401": {
+            "description": "Invalid client credentials"
+          }
+        }
+      }
+    },
+    "/admin/realms/{realm}/users": {
+      "parameters": [
+        {
+          "name": "realm",
+          "in": "path",
+          "required": true,
+          "description": "Realm name, not its internal ID. Replace YOUR_REALM with your actual realm.",
+          "schema": {
+            "type": "string"
+          },
+          "example": "YOUR_REALM"
+        }
+      ],
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "operationId": "listUsers",
+        "summary": "Find users and their internal IDs",
+        "parameters": [
+          {
+            "name": "username",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "exact",
+            "in": "query",
+            "schema": {
+              "type": "boolean",
+              "default": true
+            }
+          },
+          {
+            "name": "first",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0,
+              "default": 0
+            }
+          },
+          {
+            "name": "max",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "default": 20
+            }
+          }
+        ],
+        "responses": {
+          "400": {
+            "description": "Invalid request or realm validation/password policy failure"
+          },
+          "401": {
+            "description": "Missing, invalid, or expired bearer token"
+          },
+          "403": {
+            "description": "Insufficient administration permissions"
+          },
+          "404": {
+            "description": "Realm or user not found"
+          },
+          "500": {
+            "description": "Server or user storage provider error"
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "array",
+                  "items": {
+                    "$ref": "#/components/schemas/User"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "operationId": "createUser",
+        "summary": "Create a user",
+        "description": "Create a user, optionally including an initial password in credentials. Username is required by this documentation; realm profile rules can require additional fields. On success, read the new internal user ID from the Location header.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateUser"
+              },
+              "examples": {
+                "createUser": {
+                  "value": {
+                    "username": "sample.user",
+                    "firstName": "Sample",
+                    "lastName": "User",
+                    "email": "sample.user@example.com",
+                    "enabled": true
+                  }
+                },
+                "createWithTemporaryPassword": {
+                  "value": {
+                    "username": "sample.user",
+                    "firstName": "Sample",
+                    "lastName": "User",
+                    "email": "sample.user@example.com",
+                    "enabled": true,
+                    "credentials": [
+                      {
+                        "type": "password",
+                        "value": "ReplaceWithPolicyCompliantPassword!",
+                        "temporary": true
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Invalid request or realm validation/password policy failure"
+          },
+          "401": {
+            "description": "Missing, invalid, or expired bearer token"
+          },
+          "403": {
+            "description": "Insufficient administration permissions"
+          },
+          "404": {
+            "description": "Realm or user not found"
+          },
+          "500": {
+            "description": "Server or user storage provider error"
+          },
+          "201": {
+            "description": "User created; no response body",
+            "headers": {
+              "Location": {
+                "description": "URL of created user; final path segment is the internal user ID",
+                "schema": {
+                  "type": "string"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "Username or email conflicts with an existing user"
+          }
+        }
+      }
+    },
+    "/admin/realms/{realm}/users/{user-id}": {
+      "parameters": [
+        {
+          "name": "realm",
+          "in": "path",
+          "required": true,
+          "description": "Realm name, not its internal ID. Replace YOUR_REALM with your actual realm.",
+          "schema": {
+            "type": "string"
+          },
+          "example": "YOUR_REALM"
+        },
+        {
+          "name": "user-id",
+          "in": "path",
+          "required": true,
+          "description": "Internal Keycloak user ID from the create response Location header or user search; not the username.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "get": {
+        "tags": [
+          "Users"
+        ],
+        "operationId": "getUser",
+        "summary": "Get current user details",
+        "responses": {
+          "400": {
+            "description": "Invalid request or realm validation/password policy failure"
+          },
+          "401": {
+            "description": "Missing, invalid, or expired bearer token"
+          },
+          "403": {
+            "description": "Insufficient administration permissions"
+          },
+          "404": {
+            "description": "Realm or user not found"
+          },
+          "500": {
+            "description": "Server or user storage provider error"
+          },
+          "200": {
+            "description": "Success",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/User"
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "tags": [
+          "Users"
+        ],
+        "operationId": "updateUser",
+        "summary": "Edit, activate, or deactivate a user",
+        "description": "Use enabled=true to activate or enabled=false to deactivate. These are examples of the same API operation, not separate endpoints. Read current details before editing and preserve required/profile attributes as needed by your realm. Disabling prevents new logins; existing access tokens can remain valid until expiry. Use the logout operation to remove sessions.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/UpdateUser"
+              },
+              "examples": {
+                "editProfile": {
+                  "value": {
+                    "firstName": "Updated",
+                    "lastName": "User",
+                    "email": "updated.user@example.com"
+                  }
+                },
+                "activateUser": {
+                  "value": {
+                    "enabled": true
+                  }
+                },
+                "deactivateUser": {
+                  "value": {
+                    "enabled": false
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Invalid request or realm validation/password policy failure"
+          },
+          "401": {
+            "description": "Missing, invalid, or expired bearer token"
+          },
+          "403": {
+            "description": "Insufficient administration permissions"
+          },
+          "404": {
+            "description": "Realm or user not found"
+          },
+          "500": {
+            "description": "Server or user storage provider error"
+          },
+          "204": {
+            "description": "Success; no response body"
+          },
+          "409": {
+            "description": "Username or email conflict"
+          }
+        }
+      }
+    },
+    "/admin/realms/{realm}/users/{user-id}/reset-password": {
+      "parameters": [
+        {
+          "name": "realm",
+          "in": "path",
+          "required": true,
+          "description": "Realm name, not its internal ID. Replace YOUR_REALM with your actual realm.",
+          "schema": {
+            "type": "string"
+          },
+          "example": "YOUR_REALM"
+        },
+        {
+          "name": "user-id",
+          "in": "path",
+          "required": true,
+          "description": "Internal Keycloak user ID from the create response Location header or user search; not the username.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "put": {
+        "tags": [
+          "Passwords"
+        ],
+        "operationId": "setUserPassword",
+        "summary": "Set or change a user password as an administrator",
+        "description": "Uses the same endpoint for initial password and password replacement; no current password is required. This is an administrative reset, not self-service password change. Password must satisfy realm policy. temporary=true requires the user to update the password on the next login.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/PasswordCredential"
+              },
+              "examples": {
+                "permanentPassword": {
+                  "value": {
+                    "type": "password",
+                    "value": "ReplaceWithPolicyCompliantPassword!",
+                    "temporary": false
+                  }
+                },
+                "temporaryPassword": {
+                  "value": {
+                    "type": "password",
+                    "value": "ReplaceWithPolicyCompliantPassword!",
+                    "temporary": true
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "400": {
+            "description": "Invalid request or realm validation/password policy failure"
+          },
+          "401": {
+            "description": "Missing, invalid, or expired bearer token"
+          },
+          "403": {
+            "description": "Insufficient administration permissions"
+          },
+          "404": {
+            "description": "Realm or user not found"
+          },
+          "500": {
+            "description": "Server or user storage provider error"
+          },
+          "204": {
+            "description": "Success; no response body"
+          }
+        }
+      }
+    },
+    "/admin/realms/{realm}/users/{user-id}/logout": {
+      "parameters": [
+        {
+          "name": "realm",
+          "in": "path",
+          "required": true,
+          "description": "Realm name, not its internal ID. Replace YOUR_REALM with your actual realm.",
+          "schema": {
+            "type": "string"
+          },
+          "example": "YOUR_REALM"
+        },
+        {
+          "name": "user-id",
+          "in": "path",
+          "required": true,
+          "description": "Internal Keycloak user ID from the create response Location header or user search; not the username.",
+          "schema": {
+            "type": "string"
+          }
+        }
+      ],
+      "post": {
+        "tags": [
+          "Users"
+        ],
+        "operationId": "logoutUser",
+        "summary": "Remove a user's sessions",
+        "description": "Useful after deactivation. Removes user sessions and notifies clients with configured admin URLs. Locally validated JWT access tokens may remain accepted until expiry unless applications implement additional revocation checks.",
+        "responses": {
+          "400": {
+            "description": "Invalid request or realm validation/password policy failure"
+          },
+          "401": {
+            "description": "Missing, invalid, or expired bearer token"
+          },
+          "403": {
+            "description": "Insufficient administration permissions"
+          },
+          "404": {
+            "description": "Realm or user not found"
+          },
+          "500": {
+            "description": "Server or user storage provider error"
+          },
+          "204": {
+            "description": "Success; no response body"
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "bearerFormat": "JWT",
+        "description": "Paste access_token only; Swagger adds Bearer."
+      }
+    },
+    "schemas": {
+      "User": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "readOnly": true
+          },
+          "username": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "emailVerified": {
+            "type": "boolean",
+            "description": "Only mark true after verification."
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "requiredActions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "UPDATE_PASSWORD"
+            ]
+          },
+          "attributes": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Realm user profile configuration controls allowed attributes."
+          }
+        }
+      },
+      "CreateUser": {
+        "type": "object",
+        "required": [
+          "username"
+        ],
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "emailVerified": {
+            "type": "boolean",
+            "description": "Only mark true after verification."
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "requiredActions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "UPDATE_PASSWORD"
+            ]
+          },
+          "attributes": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Realm user profile configuration controls allowed attributes."
+          },
+          "credentials": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/PasswordCredential"
+            }
+          }
+        }
+      },
+      "UpdateUser": {
+        "type": "object",
+        "minProperties": 1,
+        "properties": {
+          "username": {
+            "type": "string"
+          },
+          "firstName": {
+            "type": "string"
+          },
+          "lastName": {
+            "type": "string"
+          },
+          "email": {
+            "type": "string",
+            "format": "email"
+          },
+          "emailVerified": {
+            "type": "boolean",
+            "description": "Only mark true after verification."
+          },
+          "enabled": {
+            "type": "boolean"
+          },
+          "requiredActions": {
+            "type": "array",
+            "items": {
+              "type": "string"
+            },
+            "example": [
+              "UPDATE_PASSWORD"
+            ]
+          },
+          "attributes": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            },
+            "description": "Realm user profile configuration controls allowed attributes."
+          }
+        }
+      },
+      "PasswordCredential": {
+        "type": "object",
+        "required": [
+          "type",
+          "value",
+          "temporary"
+        ],
+        "properties": {
+          "type": {
+            "type": "string",
+            "enum": [
+              "password"
+            ]
+          },
+          "value": {
+            "type": "string",
+            "format": "password",
+            "writeOnly": true,
+            "minLength": 1
+          },
+          "temporary": {
+            "type": "boolean"
+          }
+        }
+      },
+      "TokenResponse": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "expires_in": {
+            "type": "integer"
+          },
+          "token_type": {
+            "type": "string",
+            "example": "Bearer"
+          },
+          "scope": {
+            "type": "string"
+          }
+        }
+      }
+    }
+  },
+  "externalDocs": {
+    "description": "Official Keycloak Admin REST API",
+    "url": "https://www.keycloak.org/docs-api/latest/rest-api/index.html"
+  }
+}

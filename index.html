@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Rose Bakeshop API Documentation</title>
+  <link rel="stylesheet" href="https://unpkg.com/swagger-ui-dist@5/swagger-ui.css">
+  <style>
+    .swagger-ui .topbar .topbar-wrapper { gap: 20px; flex-wrap: wrap; }
+    @media (max-width: 760px) {
+      .swagger-ui .topbar .download-url-wrapper { flex-basis: 100%; min-width: 0; }
+      .swagger-ui .topbar .download-url-wrapper select { min-width: 0; width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <div id="swagger-ui"></div>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-bundle.js"></script>
+  <script src="https://unpkg.com/swagger-ui-dist@5/swagger-ui-standalone-preset.js"></script>
+  <script>
+    const guideUrl = './esigned-sso-setup.html';
+    const definitionSelector = '#swagger-ui .topbar .download-url-wrapper select';
+
+    // Intercept guide navigation before Swagger tries to load it as OpenAPI.
+    document.addEventListener('change', function (event) {
+      if (event.target.matches(definitionSelector) && event.target.value === guideUrl) {
+        event.stopImmediatePropagation();
+        window.location.assign(guideUrl);
+      }
+    }, true);
+
+    function addGuideDefinition() {
+      const selector = document.querySelector(definitionSelector);
+      if (!selector || Array.from(selector.options).some(option => option.value === guideUrl)) return;
+      selector.add(new Option('Laravel SSO Guide', guideUrl));
+    }
+
+    // Keep the guide available when Swagger redraws the definition selector.
+    new MutationObserver(addGuideDefinition).observe(document.getElementById('swagger-ui'), {
+      childList: true,
+      subtree: true
+    });
+
+    SwaggerUIBundle({
+      urls: [
+        { url: './openapi.json', name: 'Keycloak SSO — Users' },
+        { url: './itsupporthub.openapi.json', name: 'IT Support Hub — Tickets' }
+      ],
+      'urls.primaryName': 'Keycloak SSO — Users',
+      presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
+      layout: 'StandaloneLayout',
+      dom_id: '#swagger-ui',
+      deepLinking: true,
+      persistAuthorization: false,
+      tryItOutEnabled: false,
+      supportedSubmitMethods: ['get', 'post', 'put'],
+      validatorUrl: null,
+      onComplete: addGuideDefinition
+    });
+  </script>
+</body>
+</html>

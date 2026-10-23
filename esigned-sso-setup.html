@@ -1,0 +1,241 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Laravel SSO Integration | Rose API Documentation</title>
+<style>
+body{margin:0;background:#f5f7fa;color:#172235;font:16px/1.65 system-ui,sans-serif}main{max-width:1060px;margin:auto;padding:28px;background:white}nav{display:flex;gap:24px;flex-wrap:wrap}a{color:#1258a5}h1,h2,h3{line-height:1.3;scroll-margin-top:20px}h2{margin-top:48px;border-bottom:1px solid #dce2ea;padding-bottom:10px}pre{background:#101c2d;color:#edf3fc;padding:20px;overflow:auto;border-radius:6px;font-size:14px;line-height:1.6}code{font-family:ui-monospace,Consolas,monospace;overflow-wrap:anywhere}p code,td code{background:#eef2f6;padding:2px 4px}table{border-collapse:collapse;width:100%;font-size:15px}td,th{border:1px solid #dce2ea;padding:10px;text-align:left;vertical-align:top}th{background:#eef2f6}.table-scroll{overflow:auto}.notice{padding:16px;background:#eef5ff;border-left:4px solid #1258a5}details{margin:24px 0}li{margin:6px 0}@media(max-width:600px){main{padding:16px}h1{font-size:28px}} 
+</style></head><body><main>
+<nav aria-label="Documentation"><a href="./index.html">API documentation</a><a href="./esigned-sso-setup.md">Markdown source</a></nav>
+<p class="notice">Integrate a Laravel application with the existing Rose SSO service. Obtain client credentials and approved settings from your SSO administrator before starting. Examples require adaptation to your application; no Laravel changes have been deployed by publishing this guide.</p>
+<details><summary>On this page</summary><ol><li><a href="#1-connection-settings">1 Connection settings</a></li><li><a href="#2-login-flow">2 Login flow</a></li><li><a href="#3-prerequisites-from-your-sso-administrator">3 Prerequisites from your SSO administrator</a></li><li><a href="#4-laravel-dependencies-and-environment">4 Laravel dependencies and environment</a></li><li><a href="#5-local-account-preparation">5 Local account preparation</a></li><li><a href="#6-login-callback-and-logout-controller">6 Login callback and logout controller</a></li><li><a href="#7-routes-and-user-interface">7 Routes and user interface</a></li><li><a href="#8-deployment-and-pilot-testing">8 Deployment and pilot testing</a></li><li><a href="#9-employee-instructions">9 Employee instructions</a></li><li><a href="#10-troubleshooting">10 Troubleshooting</a></li><li><a href="#11-laravel-rollout-and-rollback">11 Laravel rollout and rollback</a></li></ol></details>
+<h1 id="esigned-sso-integration-guide">Using Rose SSO in Laravel</h1>
+<p>Connect Laravel eSigned to Keycloak realm <code>jathnier</code> using client <code>esigned</code>. Employees authenticate with Keycloak; their existing application accounts, documents, roles, and permissions remain in eSigned. The managed employee attribute <code>idcode</code> establishes an account link.</p>
+<p>For Laravel developers integrating an application with the existing Rose SSO service.</p>
+<p>This is a reference implementation, not confirmation of deployed changes. The Laravel project has not been inspected. Adapt examples to its framework version, authentication guard, employee relationships, and account eligibility rules. The examples assume <code>App\Models\User</code>, the <code>web</code> guard, and <code>users.idcode</code>.</p>
+<h2 id="1-connection-settings">1 Connection settings</h2>
+<div class="table-scroll"><table><thead><tr><th>Item</th><th>Value</th></tr></thead><tbody><tr><td>Keycloak server</td><td><code>https://sso.rosebakeshop.net</code></td></tr><tr><td>Realm</td><td><code>jathnier</code></td></tr><tr><td>Client ID</td><td><code>esigned</code></td></tr><tr><td>Issuer</td><td><code>https://sso.rosebakeshop.net/realms/jathnier</code></td></tr><tr><td>Discovery</td><td><code>https://sso.rosebakeshop.net/realms/jathnier/.well-known/openid-configuration</code></td></tr><tr><td>Application</td><td><code>https://esigned.rosebakeshop.net</code></td></tr><tr><td>Proposed login route</td><td><code>/auth/keycloak/redirect</code></td></tr><tr><td>Proposed callback</td><td><code>/auth/keycloak/callback</code></td></tr><tr><td>Proposed logout route</td><td><code>/auth/keycloak/logout</code> using POST</td></tr><tr><td>Employee claim</td><td><code>idcode</code> as a single string</td></tr></tbody></table></div>
+<p>Use the application-specific client ID and secret supplied by your SSO administrator. The values below illustrate eSigned; other Laravel applications need their own client and callback. Registering a callback with the SSO administrator does not create the Laravel route.</p>
+<h2 id="2-login-flow">2 Login flow</h2>
+<ol><li>An employee selects <strong>Sign in with SSO</strong> in eSigned.</li><li>Laravel redirects the browser to Keycloak with session-bound state and PKCE.</li><li>Keycloak authenticates the employee and returns an authorization code.</li><li>Laravel exchanges the code and requests UserInfo over HTTPS.</li><li>Laravel resolves an existing identity link, or matches exactly one eligible employee by <code>idcode</code> and records their Keycloak issuer and subject.</li><li>Laravel creates its normal session. Existing application permissions still control document access, signing actions, and administrator actions.</li></ol>
+<p>This does not automatically synchronize employees, create accounts, or grant roles.</p>
+<h2 id="3-prerequisites-from-your-sso-administrator">3 Prerequisites from your SSO administrator</h2>
+<p>Before implementing Laravel login, obtain your application client ID, client secret, realm URL, and approved HTTPS callback URL. Ask your SSO administrator to confirm that the client supports the authorization code flow with S256 PKCE and returns <code>sub</code> plus a single string <code>idcode</code> in UserInfo.</p>
+<p>Keep employee codes as strings, including leading zeros. Confirm that codes are unique and managed by authorized administrators; do not allow an employee to change the code used for account linking. The Laravel examples below consume these existing settings.</p>
+<h2 id="4-laravel-dependencies-and-environment">4 Laravel dependencies and environment</h2>
+<p>Run commands in the eSigned folder containing <code>artisan</code> and <code>composer.json</code>. Use staging first and retain the existing login option during rollout.</p>
+<pre><code class="language-powershell">php artisan --version
+php --version
+composer require laravel/socialite socialiteproviders/keycloak</code></pre>
+<p>Review dependency compatibility and deploy the lock file through the normal release process. The documentation does not install dependencies in eSigned.</p>
+<p>Merge these values into the application&#x27;s <code>.env</code>:</p>
+<pre><code class="language-dotenv">APP_URL=https://esigned.rosebakeshop.net
+SSO_ENABLED=false
+KEYCLOAK_BASE_URL=https://sso.rosebakeshop.net
+KEYCLOAK_REALM=jathnier
+KEYCLOAK_CLIENT_ID=esigned
+KEYCLOAK_CLIENT_SECRET=REPLACE_WITH_THE_CLIENT_SECRET
+KEYCLOAK_REDIRECT_URI=https://esigned.rosebakeshop.net/auth/keycloak/callback
+SSO_IDCODE_CLAIM=idcode
+SESSION_SECURE_COOKIE=true
+SESSION_SAME_SITE=lax</code></pre>
+<p>Quote the secret according to dotenv syntax if its characters require it. <code>SSO_ENABLED</code> and <code>SSO_IDCODE_CLAIM</code> are custom application settings defined below, not built-in Laravel features. Use persistent session storage and a cookie name unique to eSigned. Prefer host-only cookies. Coordinate cookie changes because existing sessions may end.</p>
+<p>Add this entry inside the returned array in <code>config/services.php</code>:</p>
+<pre><code class="language-php">&#x27;keycloak&#x27; =&gt; [
+    &#x27;client_id&#x27; =&gt; env(&#x27;KEYCLOAK_CLIENT_ID&#x27;),
+    &#x27;client_secret&#x27; =&gt; env(&#x27;KEYCLOAK_CLIENT_SECRET&#x27;),
+    &#x27;redirect&#x27; =&gt; env(&#x27;KEYCLOAK_REDIRECT_URI&#x27;),
+    &#x27;base_url&#x27; =&gt; env(&#x27;KEYCLOAK_BASE_URL&#x27;),
+    &#x27;realms&#x27; =&gt; env(&#x27;KEYCLOAK_REALM&#x27;),
+],</code></pre>
+<p>The provider&#x27;s key is <code>realms</code>, while the environment variable is singular. Create <code>config/sso.php</code>:</p>
+<pre><code class="language-php">&lt;?php
+
+return [
+    &#x27;enabled&#x27; =&gt; env(&#x27;SSO_ENABLED&#x27;, false),
+    &#x27;idcode_claim&#x27; =&gt; env(&#x27;SSO_IDCODE_CLAIM&#x27;, &#x27;idcode&#x27;),
+];</code></pre>
+<p>For Laravel 11 and later, merge this listener into the existing <code>boot()</code> method in <code>app/Providers/AppServiceProvider.php</code>:</p>
+<pre><code class="language-php">\Illuminate\Support\Facades\Event::listen(
+    \SocialiteProviders\Manager\SocialiteWasCalled::class,
+    function ($event) {
+        $event-&gt;extendSocialite(
+            &#x27;keycloak&#x27;,
+            \SocialiteProviders\Keycloak\Provider::class
+        );
+    }
+);</code></pre>
+<p>For Laravel 10 and earlier, add this entry once to the existing <code>$listen</code> array in <code>app/Providers/EventServiceProvider.php</code> instead:</p>
+<pre><code class="language-php">\SocialiteProviders\Manager\SocialiteWasCalled::class =&gt; [
+    \SocialiteProviders\Keycloak\KeycloakExtendSocialite::class . &#x27;@handle&#x27;,
+],</code></pre>
+<p>Follow the <a href="https://socialiteproviders.com/usage">Manager installation instructions</a> for service-provider registration on the installed version. Ensure its Manager service provider is registered, without duplicate managers or event listeners. Provider reference: <a href="https://socialiteproviders.com/Keycloak/">Keycloak adapter setup</a>.</p>
+<h2 id="5-local-account-preparation">5 Local account preparation</h2>
+<p>The reference controller expects these fields on the authenticatable User model:</p>
+<div class="table-scroll"><table><thead><tr><th>Field</th><th>Purpose</th></tr></thead><tbody><tr><td><code>idcode</code></td><td>Exact employee code as a string</td></tr><tr><td><code>is_active</code></td><td>Eligibility flag cast to boolean</td></tr><tr><td><code>keycloak_issuer</code></td><td>Linked realm issuer</td></tr><tr><td><code>keycloak_subject</code></td><td>Linked stable Keycloak <code>sub</code></td></tr></tbody></table></div>
+<p>Adapt lookup through the real employee relationship if the code lives in another table. Use all existing eligibility rules, including suspension and termination. Audit missing and duplicate codes and enforce uniqueness in the database where business rules permit. Check case and whitespace comparisons; deny ambiguous matches.</p>
+<p>Create a reviewed migration for identity columns. For a conventional <code>users</code> table, the schema fragment is below. Add normal migration imports and rollback:</p>
+<pre><code class="language-php">Schema::table(&#x27;users&#x27;, function (Blueprint $table) {
+    $table-&gt;string(&#x27;keycloak_issuer&#x27;, 191)-&gt;nullable();
+    $table-&gt;string(&#x27;keycloak_subject&#x27;, 191)-&gt;nullable();
+    $table-&gt;unique(
+        [&#x27;keycloak_issuer&#x27;, &#x27;keycloak_subject&#x27;],
+        &#x27;users_keycloak_identity_unique&#x27;
+    );
+});</code></pre>
+<p>Review nullable unique-index behavior for the actual database engine. Preserve existing user IDs and document ownership. Cast <code>is_active</code> as boolean in the model or replace the example&#x27;s eligibility rule. Missing flags deliberately deny login.</p>
+<p>An existing issuer and subject link takes precedence over code matching. Never silently relink a user because a code changed. Recreated Keycloak users, reused employee records, and soft-deleted accounts require administrator review.</p>
+<h2 id="6-login-callback-and-logout-controller">6 Login callback and logout controller</h2>
+<p>Create <code>app/Http/Controllers/Auth/KeycloakController.php</code>. Adapt the model, employee lookup, eligibility check, login error page, and landing page to the application. The code below deliberately rejects missing or ambiguous identities.</p>
+<pre><code class="language-php">&lt;?php
+
+namespace App\Http\Controllers\Auth;
+
+use App\Http\Controllers\Controller;
+use App\Models\User;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Auth;
+use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Log;
+use Laravel\Socialite\Facades\Socialite;
+use Throwable;
+
+class KeycloakController extends Controller
+{
+    public function redirect()
+    {
+        abort_unless(config(&#x27;sso.enabled&#x27;), 404);
+
+        return Socialite::driver(&#x27;keycloak&#x27;)
+            -&gt;scopes([&#x27;openid&#x27;, &#x27;profile&#x27;, &#x27;email&#x27;])
+            -&gt;enablePKCE()-&gt;redirect();
+    }
+
+    public function callback(Request $request)
+    {
+        abort_unless(config(&#x27;sso.enabled&#x27;), 404);
+
+        try {
+            $remote = Socialite::driver(&#x27;keycloak&#x27;)-&gt;enablePKCE()-&gt;user();
+        } catch (Throwable $error) {
+            // Exception messages can contain token responses; omit them here.
+            Log::warning(&#x27;SSO callback failed&#x27;, [
+                &#x27;exception_type&#x27; =&gt; get_class($error),
+            ]);
+
+            return redirect(&#x27;/login&#x27;)-&gt;withErrors([
+                &#x27;sso&#x27; =&gt; &#x27;SSO could not complete. Please try again.&#x27;,
+            ]);
+        }
+
+        $raw = $remote-&gt;getRaw();
+        $code = $raw[config(&#x27;sso.idcode_claim&#x27;)] ?? null;
+        $subject = $remote-&gt;getId();
+        $issuer = rtrim(config(&#x27;services.keycloak.base_url&#x27;), &#x27;/&#x27;)
+            . &#x27;/realms/&#x27; . config(&#x27;services.keycloak.realms&#x27;);
+
+        abort_unless(
+            is_string($code) &amp;&amp; $code !== &#x27;&#x27; &amp;&amp; trim($code) === $code
+            &amp;&amp; is_string($subject) &amp;&amp; $subject !== &#x27;&#x27;,
+            403,
+            &#x27;Your SSO account is not eligible for eSigned.&#x27;
+        );
+
+        $user = DB::transaction(function () use ($issuer, $subject, $code) {
+            $user = User::where(&#x27;keycloak_issuer&#x27;, $issuer)
+                -&gt;where(&#x27;keycloak_subject&#x27;, $subject)
+                -&gt;lockForUpdate()-&gt;first();
+
+            if (!$user) {
+                $matches = User::where(&#x27;idcode&#x27;, $code)
+                    -&gt;lockForUpdate()-&gt;limit(2)-&gt;get();
+
+                abort_unless($matches-&gt;count() === 1, 403,
+                    &#x27;Your account is not eligible for eSigned.&#x27;);
+
+                $user = $matches-&gt;first();
+
+                abort_unless(
+                    $user-&gt;keycloak_issuer === null
+                    &amp;&amp; $user-&gt;keycloak_subject === null,
+                    403,
+                    &#x27;Contact support to review your account link.&#x27;
+                );
+            }
+
+            // Replace with all existing account eligibility checks.
+            abort_unless(
+                $user-&gt;getAttribute(&#x27;is_active&#x27;) === true
+                &amp;&amp; (string) $user-&gt;idcode === $code,
+                403,
+                &#x27;Your account is not eligible for eSigned.&#x27;
+            );
+
+            if ($user-&gt;keycloak_subject === null) {
+                $user-&gt;keycloak_issuer = $issuer;
+                $user-&gt;keycloak_subject = $subject;
+                $user-&gt;save();
+            }
+
+            return $user;
+        });
+
+        Auth::guard(&#x27;web&#x27;)-&gt;login($user);
+        $request-&gt;session()-&gt;regenerate();
+
+        // Replace with eSigned&#x27;s actual fixed local landing page.
+        return redirect(&#x27;/&#x27;);
+    }
+
+    public function logout(Request $request)
+    {
+        // Sign out of eSigned only; preserve the shared Rose SSO session.
+        Auth::guard(&#x27;web&#x27;)-&gt;logout();
+        $request-&gt;session()-&gt;invalidate();
+        $request-&gt;session()-&gt;regenerateToken();
+
+        return redirect(&#x27;/login&#x27;);
+    }
+}</code></pre>
+<p>Keep the identity unique constraint to protect concurrent linking attempts. Handle any resulting conflict as a generic denied or failed login; never retry by attaching a different user. Local accounts are linked rather than recreated.</p>
+<p>This adapter checks state, exchanges the code on the server, and requests UserInfo from the fixed HTTPS realm. The stored issuer is derived from server configuration, not the browser. Keep TLS verification enabled. If a different library consumes ID tokens directly, it must validate signature, issuer, audience, expiry, and any applicable nonce before trusting the claims.</p>
+<p>Do not add <code>stateless()</code> to these browser routes. The session must retain state and the PKCE verifier from redirect to callback. Do not log codes, client secrets, full claims, or token responses.</p>
+<p>References: <a href="https://laravel.com/docs/12.x/socialite">Laravel Socialite</a>, <a href="https://github.com/laravel/socialite/blob/5.x/src/Two/AbstractProvider.php">Socialite state and PKCE</a>, <a href="https://laravel.com/docs/12.x/authentication">Laravel session authentication</a>.</p>
+<h2 id="7-routes-and-user-interface">7 Routes and user interface</h2>
+<p>Merge these routes into <code>routes/web.php</code> without replacing existing routes:</p>
+<pre><code class="language-php">use App\Http\Controllers\Auth\KeycloakController;
+use Illuminate\Support\Facades\Route;
+
+Route::middleware(&#x27;guest:web&#x27;)-&gt;group(function () {
+    Route::get(&#x27;/auth/keycloak/redirect&#x27;, [KeycloakController::class, &#x27;redirect&#x27;])
+        -&gt;name(&#x27;sso.redirect&#x27;);
+    Route::get(&#x27;/auth/keycloak/callback&#x27;, [KeycloakController::class, &#x27;callback&#x27;])
+        -&gt;name(&#x27;sso.callback&#x27;);
+});
+
+Route::post(&#x27;/auth/keycloak/logout&#x27;, [KeycloakController::class, &#x27;logout&#x27;])
+    -&gt;middleware(&#x27;auth:web&#x27;)-&gt;name(&#x27;sso.logout&#x27;);</code></pre>
+<p>The web middleware stack must provide sessions. Retain CSRF protection on the logout POST. Confirm <code>/login</code> exists for callback failures and replace the controller&#x27;s landing page with the correct local page. Do not place these routes in a stateless API group.</p>
+<p>On the existing login page, show <strong>Sign in with SSO</strong> only when <code>config(&#x27;sso.enabled&#x27;)</code> is true and link it to <code>route(&#x27;sso.redirect&#x27;)</code>. Display the <code>sso</code> validation error using the application&#x27;s normal error component. For logout, use a POST form targeting <code>route(&#x27;sso.logout&#x27;)</code> with Blade <code>@csrf</code>. Keep existing password login available for the pilot.</p>
+<p>This logout flow invalidates only the local eSigned session. It does not open Keycloak logout or revoke the shared Rose SSO session. Selecting Rose SSO again can reuse the central session without another password prompt when that session and its browser cookies are still valid. Do not force <code>prompt=login</code> or <code>max_age=0</code> for an ordinary sign-in. Keycloak policies may still require reauthentication.</p>
+<p>For a Vue SPA, restore the user from the authenticated session endpoint on direct visits to home and login. Keep home accessible while signed in and show a permission-appropriate <strong>Go to dashboard</strong> link. If a valid session visits <code>/login</code>, redirect to an existing, permitted local intended page or the normal application landing page. Do not start a new SSO flow merely to visit home or <code>/login</code>. Preserve existing authorization checks and reject external redirects.</p>
+<p>A logout or account disable in Keycloak alone does not automatically destroy every existing Laravel session. Immediate central revocation requires a separate backchannel logout or session revalidation implementation and tests.</p>
+<h2 id="8-deployment-and-pilot-testing">8 Deployment and pilot testing</h2>
+<ol><li>Confirm both domains have valid HTTPS and the Laravel server can reach Keycloak discovery, token, and UserInfo endpoints.</li><li>Review schema changes and account eligibility checks; apply migrations using the application&#x27;s normal release process and a database backup.</li><li>If Laravel is behind a proxy, trust only the intended proxy and ensure Laravel recognizes HTTPS. Keep the session cookie stable during login.</li><li>Set <code>SSO_ENABLED=true</code> for a pilot and rebuild cached configuration:</li></ol>
+<p>   ``<code>powershell php artisan config:cache php artisan route:list --path=auth/keycloak </code><code></code></p>
+<ol><li>Test with a normal employee in a private browser window. Keep administrator recovery access available. Deploy only after the following checks pass.</li></ol>
+<div class="table-scroll"><table><thead><tr><th>Test</th><th>Expected result</th></tr></thead><tbody><tr><td>Eligible employee with matching code</td><td>Existing account signs in with its current document ownership and permissions</td></tr><tr><td>Code with leading zeros</td><td>Exact value preserved throughout</td></tr><tr><td>Missing or array-valued code</td><td>Login denied</td></tr><tr><td>Unknown or duplicate local code</td><td>Login denied and no account created</td></tr><tr><td>Inactive or suspended employee</td><td>Existing eligibility policy denies access</td></tr><tr><td>Changed code or conflicting identity link</td><td>No silent relinking; administrator review</td></tr><tr><td>Altered state or reused code</td><td>Callback rejected</td></tr><tr><td>Standard employee opens an administrator page</td><td>Existing authorization still enforced</td></tr><tr><td>Logout POST</td><td>eSigned session ends; shared Keycloak session remains active</td></tr><tr><td>Home with a valid app session</td><td>Signed-in state is restored and a permitted dashboard link is shown</td></tr><tr><td>Login page with a valid app session</td><td>Redirects to a permitted local destination without a new SSO login</td></tr><tr><td>Sign in again after local sign-out</td><td>Reuses the existing Keycloak session when cookies and session policies allow</td></tr><tr><td>Keycloak unavailable</td><td>Controlled error and no unverified login</td></tr><tr><td>Second integrated application in the same realm</td><td>Keycloak browser session can be reused by that application&#x27;s own client</td></tr><tr><td>Keycloak account disabled while Laravel session exists</td><td>Behavior matches the documented local-session revocation policy</td></tr></tbody></table></div>
+<p>Automate callback tests using mocked provider results for valid, missing, duplicate, inactive, and conflicting identities. Test real browser state, PKCE, proxy behavior, HTTPS, and logout in staging separately.</p>
+<h2 id="9-employee-instructions">9 Employee instructions</h2>
+<ol><li>Open <code>https://esigned.rosebakeshop.net/</code> and select <strong>Sign in with SSO</strong>.</li><li>Use your assigned Keycloak username and password, then complete any password update or MFA prompt.</li><li>After successful login, your existing eSigned account opens.</li><li>If access is denied, ask support to review your employee code and eligibility. Do not create another account to bypass the error.</li><li>Use <strong>Sign out</strong> to leave eSigned. This does not sign you out of Rose SSO or other applications. On a shared computer, also use your organization&#x27;s approved central SSO sign-out procedure and close the browser.</li></ol>
+<p>Adding <code>idcode</code> does not make it the login username. If employees should type their code into Keycloak&#x27;s login page, provision their Keycloak username as that code under an agreed username policy. Account linking still uses <code>idcode</code>.</p>
+<h2 id="10-troubleshooting">10 Troubleshooting</h2>
+<div class="table-scroll"><table><thead><tr><th>Symptom</th><th>Check</th></tr></thead><tbody><tr><td>Invalid redirect URI</td><td>Exact HTTPS callback in Keycloak, Laravel environment, and deployed routes</td></tr><tr><td>Driver keycloak not supported</td><td>Dependencies, Manager provider, event registration, configuration cache</td></tr><tr><td>Invalid client</td><td>Client ID, current secret, realm, client authentication and Standard flow</td></tr><tr><td>PKCE failure</td><td>Supported Socialite release, <code>enablePKCE()</code> in both methods, persistent session</td></tr><tr><td>Invalid state</td><td>Cookie host and name, HTTPS, session storage, parallel or repeated login attempts</td></tr><tr><td>Missing code claim</td><td>Correct user and mapper, Add to userinfo On, single string value</td></tr><tr><td>Account rejected</td><td>Exact code, unique local match, eligibility status cast, guard, existing identity link</td></tr><tr><td>Callback 404</td><td>Laravel route, deployed code, route cache, Apache application routing</td></tr><tr><td>Callback 500</td><td>Laravel logs, actual schema, eligibility rules; keep debug output private</td></tr><tr><td>App sign-out ends other SSO apps</td><td>Remove Keycloak logout calls or browser redirects from the app&#x27;s sign-out flow</td></tr><tr><td>Immediate SSO login after app sign-out</td><td>Expected when the shared Keycloak session remains valid; do not automatically start SSO from the app login page</td></tr><tr><td>Credentials requested after local sign-out</td><td>Confirm the latest local-only logout is deployed; inspect Keycloak session expiry, browser cookies, and forced-reauthentication policies</td></tr><tr><td>PHP TLS error</td><td>Trusted CA bundle configuration; never disable certificate verification</td></tr></tbody></table></div>
+<p>Application diagnostics from its project root:</p>
+<pre><code class="language-powershell">php artisan route:list --path=auth/keycloak
+Get-Content .\storage\logs\laravel.log -Tail 80</code></pre>
+<p>Do not change Laravel?s <code>APP_KEY</code> or disable state validation to resolve a callback failure. Review application logs for secrets before sharing them.</p>
+<h2 id="11-laravel-rollout-and-rollback">11 Laravel rollout and rollback</h2>
+<p>Back up the application database, including identity links, before applying migrations. Keep existing password login available during the pilot and deploy reviewed migrations and the Composer lock file through the normal release process.</p>
+<p>To disable new SSO logins, set <code>SSO_ENABLED=false</code> and run <code>php artisan config:cache</code>. Retain existing password login and identity-link data. Disabling the entry point does not invalidate existing sessions; follow your application&#x27;s session-revocation policy if needed. Do not delete users, documents, or signing records during rollback.</p>
+<p>Before applying the examples, confirm the actual Laravel version, authentication model and guard, employee code relationship, account eligibility rules, login and landing routes, database engine, and approved linking policy.
+</p>
+</main></body></html>

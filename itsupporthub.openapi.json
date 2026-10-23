@@ -1,0 +1,200 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "IT Support Hub ? Ticket API",
+    "version": "1.0.0",
+    "description": "Request contract derived from the local create-ticket skill and its client helper, not a live server schema. Department/category IDs in examples are placeholders: use active compatible IDs. No production ticket was submitted for verification. Additional server requirements may apply."
+  },
+  "servers": [
+    {
+      "url": "https://itsupporthub.rosebakeshop.net",
+      "description": "Production IT Support Hub"
+    }
+  ],
+  "security": [
+    {
+      "ticketBearer": []
+    }
+  ],
+  "paths": {
+    "/api/ticket": {
+      "post": {
+        "tags": [
+          "Tickets"
+        ],
+        "operationId": "createTicket",
+        "summary": "Create a support ticket",
+        "description": "Submits a real ticket. Supply a Support Hub API token, not a Keycloak token unless your integration explicitly supports it. Do not automatically retry after a timeout or an unconfirmed result: check for an existing ticket first.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTicket"
+              },
+              "example": {
+                "name": "Sample Requester",
+                "email": "requester@example.com",
+                "department_id": 1,
+                "category_id": 2,
+                "subject": "Unable to print receipts",
+                "description": "The receipt printer is offline. Please investigate.",
+                "priority": "medium",
+                "ticket_type": "incident"
+              }
+            }
+          }
+        },
+        "responses": {
+          "201": {
+            "description": "Ticket created; response fields expected by the existing helper.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "success": {
+                      "type": "boolean",
+                      "example": true
+                    },
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "ticket_id": {
+                          "description": "Ticket identifier; deployed type not verified."
+                        },
+                        "uuid": {
+                          "type": "string"
+                        },
+                        "url": {
+                          "type": "string",
+                          "format": "uri"
+                        },
+                        "assignee_id": {
+                          "type": "integer",
+                          "nullable": true
+                        }
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing API token"
+          },
+          "403": {
+            "description": "Not authorized"
+          },
+          "422": {
+            "description": "Validation failed; inspect the errors in the JSON response"
+          },
+          "429": {
+            "description": "Rate limited"
+          },
+          "default": {
+            "description": "Unexpected response. Creation may be unconfirmed; check the application before retrying."
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "ticketBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Support Hub API token; paste token only."
+      }
+    },
+    "schemas": {
+      "CreateTicket": {
+        "type": "object",
+        "required": [
+          "name",
+          "email",
+          "department_id",
+          "category_id",
+          "subject",
+          "description"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "email": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "format": "email"
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "department_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "category_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "board_id": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional active board ID. Omit both board_id and board_slug for backlog. Do not combine with board_slug."
+          },
+          "assignee_id": {
+            "type": "integer",
+            "minimum": 1,
+            "nullable": true,
+            "description": "Optional active admin, super_admin, or technician ID; must have board access when a board is selected. Requires deployed assignee support."
+          },
+          "board_slug": {
+            "type": "string",
+            "description": "Alternative to board_id; do not supply both."
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ],
+            "default": "medium"
+          },
+          "ticket_type": {
+            "type": "string",
+            "enum": [
+              "request",
+              "incident",
+              "problem",
+              "task"
+            ],
+            "default": "request"
+          },
+          "source_app": {
+            "type": "string",
+            "description": "Optional calling application name."
+          }
+        },
+        "not": {
+          "required": [
+            "board_id",
+            "board_slug"
+          ]
+        }
+      }
+    }
+  }
+}
