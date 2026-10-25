@@ -1,0 +1,19 @@
+Options -Indexes -MultiViews
+
+# Production requires authentication. For local Apache only, change to local.
+# Local mode skips authentication only for requests from the loopback address.
+SetEnv DOCS_ENV production
+
+# Copy this file to .htaccess and set your own absolute password file path.
+# Keep the password file outside Apache's document root and readable by PHP.
+# Windows example:
+SetEnv DOCS_AUTH_FILE "C:/xampp/security/rose-docs.htpasswd"
+# Linux alternative (replace the Windows line above):
+# SetEnv DOCS_AUTH_FILE "/etc/apache2/rose-docs.htpasswd"
+
+RewriteEngine On
+# Pass Basic credentials through to PHP, including FastCGI installations.
+RewriteRule .* - [E=HTTP_AUTHORIZATION:%{HTTP:Authorization}]
+RewriteRule ^gateway\.php$ - [END]
+# Protect the UI, raw specifications, and every other request.
+RewriteRule ^ gateway.php [END]

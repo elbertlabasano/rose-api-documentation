@@ -11,36 +11,45 @@ function stopRequest(int $status, string $message): never
     exit($message);
 }
 
-$authFile = getenv('DOCS_AUTH_FILE');
-$records = $authFile ? @file($authFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) : false;
-if ($records === false || $records === []) {
-    stopRequest(503, 'Documentation authentication is not configured. See setup.md on the server.');
-}
+// The built-in PHP server defaults to local mode. Apache defaults to production.
+// Never infer the environment from the browser's Host or forwarded headers.
+$environment = getenv('DOCS_ENV') ?: (PHP_SAPI === 'cli-server' ? 'local' : 'production');
+$isLoopback = in_array($_SERVER['REMOTE_ADDR'] ?? '', ['127.0.0.1', '::1', '::ffff:127.0.0.1'], true);
+$skipAuthentication = $environment === 'local' && $isLoopback;
 
-$username = $_SERVER['PHP_AUTH_USER'] ?? null;
-$password = $_SERVER['PHP_AUTH_PW'] ?? null;
-if ($username === null || $password === null) {
-    $authorization = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
-    if (preg_match('/^Basic\s+(.+)$/i', $authorization, $matches)) {
-        $decoded = base64_decode($matches[1], true);
-        if ($decoded !== false && str_contains($decoded, ':')) {
-            [$username, $password] = explode(':', $decoded, 2);
+if (!$skipAuthentication) {
+    $authFile = getenv('DOCS_AUTH_FILE');
+    $records = $authFile ? @file($authFile, FILE_IGNORE_NEW_LINES | FILE_SKIP_EMPTY_LINES) : false;
+    if ($records === false || $records === []) {
+        stopRequest(503, 'Documentation authentication is not configured. See setup.md on the server.');
+    }
+
+    $username = $_SERVER['PHP_AUTH_USER'] ?? null;
+    $password = $_SERVER['PHP_AUTH_PW'] ?? null;
+    if ($username === null || $password === null) {
+        $authorization = $_SERVER['HTTP_AUTHORIZATION'] ?? $_SERVER['REDIRECT_HTTP_AUTHORIZATION'] ?? '';
+        if (preg_match('/^Basic\s+(.+)$/i', $authorization, $matches)) {
+            $decoded = base64_decode($matches[1], true);
+            if ($decoded !== false && str_contains($decoded, ':')) {
+                [$username, $password] = explode(':', $decoded, 2);
+            }
         }
     }
-}
 
-$authenticated = false;
-foreach ($records as $record) {
-    $parts = explode(':', $record, 2);
-    if (count($parts) === 2 && $username !== null && $password !== null
-        && hash_equals($parts[0], $username) && password_verify($password, $parts[1])) {
-        $authenticated = true;
-        break;
+    $authenticated = false;
+    foreach ($records as $record) {
+        $parts = explode(':', $record, 2);
+        if (count($parts) === 2 && $username !== null && $password !== null
+            && hash_equals($parts[0], $username) && password_verify($password, $parts[1])) {
+            $authenticated = true;
+            break;
+        }
     }
-}
-if (!$authenticated) {
-    header('WWW-Authenticate: Basic realm="Rose API Documentation", charset="UTF-8"');
-    stopRequest(401, 'Authentication required.');
+    if (!$authenticated) {
+        header('WWW-Authenticate: Basic realm="Rose API Documentation", charset="UTF-8"');
+        stopRequest(401, 'Authentication required.');
+    }
+
 }
 
 if (!in_array($_SERVER['REQUEST_METHOD'], ['GET', 'HEAD'], true)) {

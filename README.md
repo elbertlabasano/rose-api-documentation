@@ -6,9 +6,9 @@ See [setup.md](setup.md) for local PHP and Apache/XAMPP setup instructions and h
 
 ## Open Swagger UI
 
-Follow [setup.md](setup.md) to create a bcrypt password file outside the web root and run with Apache/PHP or the protected local PHP server. Documentation access requires HTTP Basic Authentication, including direct requests to either OpenAPI JSON file. API bearer tokens in Swagger remain separate from the documentation login.
+For local use, run `php -S localhost:8080 gateway.php` and open <http://localhost:8080/index.html>; no documentation password is required for loopback requests. For local Apache, copy `.htaccess.example` to `.htaccess` and set `DOCS_ENV local`. Production Apache defaults to requiring HTTP Basic Authentication, including direct requests to either OpenAPI JSON file. Follow [setup.md](setup.md) to configure a production bcrypt password file outside the web root and keep `DOCS_ENV production`. API bearer tokens in Swagger remain separate from the documentation login.
 
-Deploy `index.html`, `openapi.json`, `itsupporthub.openapi.json`, `esigned-sso-setup.html`, `esigned-sso-setup.md`, `gateway.php`, and `.htaccess` together. Configure the password file path and enable Apache's rewrite/env modules and `.htaccess` overrides as described in setup.md. Use HTTPS for deployed documentation. PHP 8.1+ is required. Previous static Python/Node preview commands do not enforce authentication and have been removed.
+Deploy `index.html`, `openapi.json`, `itsupporthub.openapi.json`, `esigned-sso-setup.html`, `esigned-sso-setup.md`, and `gateway.php`. On initial Apache setup, copy `.htaccess.example` to `.htaccess` and configure your own absolute password file path. The local `.htaccess` is ignored by Git; the example is shared. Enable Apache's rewrite/env modules and `.htaccess` overrides as described in setup.md. Use HTTPS for deployed documentation. PHP 8.1+ is required. Previous static Python/Node preview commands do not enforce authentication and have been removed.
 
 ## Multiple APIs and Support Hub tickets
 
@@ -84,6 +84,6 @@ Official references: [Admin REST API](https://www.keycloak.org/docs-api/latest/r
 
 ## eSigned SSO integration guide
 
-Open **Laravel SSO Guide** in the definition dropdown, or visit `esigned-sso-setup.html`. The full Laravel/Keycloak setup guide includes connection settings, the employee claim prerequisites, account linking, controller and route examples, pilot testing, troubleshooting, and rollback. Its Markdown source is `esigned-sso-setup.md`. Both files require the documentation login.
+Open **Laravel SSO Guide** in the definition dropdown, or visit `esigned-sso-setup.html`. The full Laravel/Keycloak setup guide includes connection settings, the employee claim prerequisites, account linking, controller and route examples, pilot testing, troubleshooting, and rollback. Its Markdown source is `esigned-sso-setup.md`. Both files require the documentation login in production and open without it locally.
 
 The supplied reference has been preserved; it is not a verified deployment or implementation in eSigned. The appended local environment dump was excluded because it contained a client secret and conflicting local settings. No live secrets are included in the published guide.
