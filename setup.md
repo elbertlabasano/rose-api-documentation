@@ -102,7 +102,7 @@ Use the selector at the top of the page:
 
 For Keycloak, replace `YOUR_REALM` in requests with your actual realm name. Use the authentication operation to obtain an authorized service account token, then paste its `access_token` into **Authorize**. See [README.md](README.md) for the required client permissions.
 
-For Support Hub, select its documentation and enter your Support Hub API token in **Authorize**. Expand **POST /api/ticket** to review the create-ticket request. Replace the sample requester and department/category IDs with valid values for your application. The request contract comes from the existing client helper and has not been verified against a live server schema.
+For Support Hub, select its documentation and enter your Support Hub API token in **Authorize**. Expand **POST /api/ticket** to review the create-ticket request. Replace the sample requester and department/category IDs with valid values for your application. The request contract is based on the supplied ExternalTicketController. Select JSON without files or multipart/form-data for attachments; checklist form fields use bracket notation. Route/middleware configuration and the live deployment have not been verified.
 
 Paste tokens without the `Bearer` prefix. Click **Try it out** and **Execute** only when you intend to send the request. User changes and ticket creation affect the configured production systems. Running this documentation locally does not make the APIs local.
 

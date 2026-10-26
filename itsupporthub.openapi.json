@@ -1,9 +1,9 @@
 {
   "openapi": "3.0.3",
   "info": {
-    "title": "IT Support Hub ? Ticket API",
-    "version": "1.0.0",
-    "description": "Request contract derived from the local create-ticket skill and its client helper, not a live server schema. Department/category IDs in examples are placeholders: use active compatible IDs. No production ticket was submitted for verification. Additional server requirements may apply."
+    "title": "IT Support Hub - Ticket API",
+    "version": "1.1.0",
+    "description": "Create-ticket request validation and response documented from the supplied ExternalTicketController::store. The existing /api/ticket route and bearer authentication are retained from prior integration documentation; route/middleware configuration and TicketService internals were not supplied. Example IDs must be replaced with active, compatible records. No production request was submitted."
   },
   "servers": [
     {
@@ -24,7 +24,7 @@
         ],
         "operationId": "createTicket",
         "summary": "Create a support ticket",
-        "description": "Submits a real ticket. Supply a Support Hub API token, not a Keycloak token unless your integration explicitly supports it. Do not automatically retry after a timeout or an unconfirmed result: check for an existing ticket first.",
+        "description": "Creates a production ticket. Requester lookup uses normalized lower-case email. If no requester exists, the controller creates an active, verified viewer account with a random password and change_password=1; an existing requester phone is updated when a non-empty different phone is supplied. The ticket source is external_api. Defaults: priority=medium, ticket_type=request. Choose JSON without files or multipart/form-data for uploads. Do not automatically retry an uncertain result: TicketService idempotency was not provided, and an error after persistence may still mean a ticket exists.",
         "requestBody": {
           "required": true,
           "content": {
@@ -32,22 +32,110 @@
               "schema": {
                 "$ref": "#/components/schemas/CreateTicket"
               },
-              "example": {
-                "name": "Sample Requester",
-                "email": "requester@example.com",
-                "department_id": 1,
-                "category_id": 2,
-                "subject": "Unable to print receipts",
-                "description": "The receipt printer is offline. Please investigate.",
-                "priority": "medium",
-                "ticket_type": "incident"
+              "examples": {
+                "minimal": {
+                  "summary": "Create without files or board",
+                  "value": {
+                    "name": "Sample Requester",
+                    "email": "requester@example.com",
+                    "department_id": 1,
+                    "category_id": 2,
+                    "subject": "Unable to print receipts",
+                    "description": "Receipt printer is offline. Please investigate.",
+                    "priority": "medium",
+                    "ticket_type": "incident"
+                  }
+                },
+                "withChecklist": {
+                  "summary": "Board, checklist, and source metadata (replace IDs)",
+                  "value": {
+                    "name": "Sample Requester",
+                    "email": "requester@example.com",
+                    "department_id": 1,
+                    "category_id": 2,
+                    "subject": "Unable to print receipts",
+                    "description": "Receipt printer is offline. Please investigate.",
+                    "priority": "medium",
+                    "ticket_type": "incident",
+                    "phone": "09123456789",
+                    "board_slug": "it-support",
+                    "assignee_id": 3,
+                    "checklist": [
+                      {
+                        "content": "Check printer connection",
+                        "is_completed": false,
+                        "assigned_to": 3
+                      },
+                      {
+                        "content": "Print a test receipt"
+                      }
+                    ],
+                    "source_app": "esigned",
+                    "external_reference": "REQ-123",
+                    "source_url": "https://esigned.rosebakeshop.net/requests/123",
+                    "request_context": {
+                      "page": "requests"
+                    }
+                  }
+                }
+              }
+            },
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateTicketMultipart"
+              },
+              "encoding": {
+                "attachments[]": {
+                  "style": "form",
+                  "explode": true
+                }
               }
             }
           }
         },
         "responses": {
           "201": {
-            "description": "Ticket created; response fields expected by the existing helper.",
+            "description": "Ticket created successfully.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/TicketCreated"
+                }
+              }
+            }
+          },
+          "401": {
+            "description": "Invalid or missing API token (depends on existing route/middleware; not defined by this controller)."
+          },
+          "403": {
+            "description": "Not authorized (depends on existing route/middleware; not defined by this controller)."
+          },
+          "422": {
+            "description": "Request validation failed, including category/department mismatch, both non-empty board selectors, blank checklist content, or assignee board access failures. Error keys may use checklist.0.content or checklist.0.assigned_to. Body follows Laravel validation handling; global exception handling may customize it.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/ValidationError"
+                },
+                "example": {
+                  "message": "The selected category does not belong to the selected department.",
+                  "errors": {
+                    "category_id": [
+                      "The selected category does not belong to the selected department."
+                    ]
+                  }
+                }
+              }
+            }
+          },
+          "429": {
+            "description": "Rate limited (depends on existing route/middleware; not defined by this controller)."
+          },
+          "default": {
+            "description": "Unexpected response. Creation may be unconfirmed; check the application before retrying."
+          },
+          "500": {
+            "description": "Caught failure while creating the requester/ticket or preparing the success response. Check for an existing ticket before retrying.",
             "content": {
               "application/json": {
                 "schema": {
@@ -55,46 +143,24 @@
                   "properties": {
                     "success": {
                       "type": "boolean",
-                      "example": true
+                      "enum": [
+                        false
+                      ]
                     },
-                    "data": {
-                      "type": "object",
-                      "properties": {
-                        "ticket_id": {
-                          "description": "Ticket identifier; deployed type not verified."
-                        },
-                        "uuid": {
-                          "type": "string"
-                        },
-                        "url": {
-                          "type": "string",
-                          "format": "uri"
-                        },
-                        "assignee_id": {
-                          "type": "integer",
-                          "nullable": true
-                        }
-                      }
+                    "message": {
+                      "type": "string"
                     }
                   }
+                },
+                "example": {
+                  "success": false,
+                  "message": "Failed to create ticket."
                 }
               }
             }
           },
-          "401": {
-            "description": "Invalid or missing API token"
-          },
-          "403": {
-            "description": "Not authorized"
-          },
-          "422": {
-            "description": "Validation failed; inspect the errors in the JSON response"
-          },
-          "429": {
-            "description": "Rate limited"
-          },
-          "default": {
-            "description": "Unexpected response. Creation may be unconfirmed; check the application before retrying."
+          "404": {
+            "description": "A category, board, or assignee lookup before creation no longer finds the record (for example, removed after validation); response handled by Laravel."
           }
         }
       }
@@ -105,7 +171,7 @@
       "ticketBearer": {
         "type": "http",
         "scheme": "bearer",
-        "description": "Support Hub API token; paste token only."
+        "description": "Support Hub API token; paste token only. Retained from existing integration; authentication middleware was not included in the supplied controller."
       }
     },
     "schemas": {
@@ -142,26 +208,27 @@
           },
           "department_id": {
             "type": "integer",
-            "minimum": 1
+            "description": "Existing active department ID."
           },
           "category_id": {
             "type": "integer",
-            "minimum": 1
+            "description": "Existing active category ID. Its department must match department_id unless the category has no department."
           },
           "board_id": {
             "type": "integer",
-            "minimum": 1,
-            "description": "Optional active board ID. Omit both board_id and board_slug for backlog. Do not combine with board_slug."
+            "nullable": true,
+            "description": "Existing active board ID. Use instead of a non-empty board_slug. Omit or null both selectors for backlog."
           },
           "assignee_id": {
             "type": "integer",
             "minimum": 1,
             "nullable": true,
-            "description": "Optional active admin, super_admin, or technician ID; must have board access when a board is selected. Requires deployed assignee support."
+            "description": "Optional active admin, super_admin, or technician user ID. Must have access to the selected board when one is supplied."
           },
           "board_slug": {
             "type": "string",
-            "description": "Alternative to board_id; do not supply both."
+            "nullable": true,
+            "description": "Existing active board slug. Use instead of a non-empty board_id."
           },
           "priority": {
             "type": "string",
@@ -185,14 +252,321 @@
           },
           "source_app": {
             "type": "string",
-            "description": "Optional calling application name."
+            "nullable": true,
+            "maxLength": 100,
+            "description": "Non-empty value is merged into request_context.source_app, overriding the same context key."
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 20
+          },
+          "external_reference": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 255,
+            "description": "Non-empty value overrides request_context.external_reference and is echoed in the response. No idempotency guarantee is shown by the controller."
+          },
+          "source_url": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true,
+            "maxLength": 1000
+          },
+          "request_context": {
+            "nullable": true,
+            "description": "Laravel array validation accepts a JSON object or array. Metadata passed to TicketService; non-empty source_app and external_reference overwrite corresponding keys. Empty context becomes null.",
+            "oneOf": [
+              {
+                "type": "object",
+                "additionalProperties": true
+              },
+              {
+                "type": "array",
+                "items": {}
+              }
+            ]
+          },
+          "checklist": {
+            "type": "array",
+            "nullable": true,
+            "maxItems": 50,
+            "items": {
+              "$ref": "#/components/schemas/ChecklistInput"
+            },
+            "description": "Optional sequential list of at most 50 items. Omitted/null becomes an empty checklist. Only content, is_completed, and assigned_to are allowed per item."
           }
         },
-        "not": {
-          "required": [
-            "board_id",
-            "board_slug"
-          ]
+        "description": "Supply either a non-empty board_id or board_slug, not both. Both may be omitted or null for backlog. A category with a department must match department_id; a category with no department is allowed. Active records are required. Non-null ticket/checklist assignees must be active admin, super_admin, or technician users and have access to the selected board. Explicit null for one board selector does not conflict with the other."
+      },
+      "ChecklistInput": {
+        "type": "object",
+        "additionalProperties": false,
+        "required": [
+          "content"
+        ],
+        "properties": {
+          "content": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500,
+            "pattern": "\\S",
+            "description": "Trimmed before storage; whitespace-only content is rejected."
+          },
+          "is_completed": {
+            "type": "boolean",
+            "default": false,
+            "description": "Laravel boolean validation also accepts 0, 1, \"0\", and \"1\". Use boolean values in JSON and 0/1 in multipart."
+          },
+          "assigned_to": {
+            "type": "integer",
+            "minimum": 1,
+            "nullable": true,
+            "description": "Optional active admin, super_admin, or technician ID. Must have access to selected board. Defaults to null."
+          }
+        }
+      },
+      "CreateTicketMultipart": {
+        "type": "object",
+        "required": [
+          "name",
+          "email",
+          "department_id",
+          "category_id",
+          "subject",
+          "description"
+        ],
+        "properties": {
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255
+          },
+          "email": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 255,
+            "format": "email"
+          },
+          "subject": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 500
+          },
+          "description": {
+            "type": "string",
+            "minLength": 1
+          },
+          "department_id": {
+            "type": "integer",
+            "description": "Existing active department ID."
+          },
+          "category_id": {
+            "type": "integer",
+            "description": "Existing active category ID. Its department must match department_id unless the category has no department."
+          },
+          "board_id": {
+            "type": "integer",
+            "nullable": true,
+            "description": "Existing active board ID. Use instead of a non-empty board_slug. Omit or null both selectors for backlog."
+          },
+          "assignee_id": {
+            "type": "integer",
+            "minimum": 1,
+            "nullable": true,
+            "description": "Optional active admin, super_admin, or technician user ID. Must have access to the selected board when one is supplied."
+          },
+          "board_slug": {
+            "type": "string",
+            "nullable": true,
+            "description": "Existing active board slug. Use instead of a non-empty board_id."
+          },
+          "priority": {
+            "type": "string",
+            "enum": [
+              "low",
+              "medium",
+              "high",
+              "critical"
+            ],
+            "default": "medium"
+          },
+          "ticket_type": {
+            "type": "string",
+            "enum": [
+              "request",
+              "incident",
+              "problem",
+              "task"
+            ],
+            "default": "request"
+          },
+          "source_app": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 100,
+            "description": "Non-empty value is merged into request_context.source_app, overriding the same context key."
+          },
+          "phone": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 20
+          },
+          "external_reference": {
+            "type": "string",
+            "nullable": true,
+            "maxLength": 255,
+            "description": "Non-empty value overrides request_context.external_reference and is echoed in the response. No idempotency guarantee is shown by the controller."
+          },
+          "source_url": {
+            "type": "string",
+            "format": "uri",
+            "nullable": true,
+            "maxLength": 1000
+          },
+          "attachments[]": {
+            "type": "array",
+            "maxItems": 10,
+            "items": {
+              "type": "string",
+              "format": "binary"
+            },
+            "description": "Up to 10 files, each at most 10240 KB (10 MiB). Allowed types: jpg, jpeg, png, pdf, doc, docx, txt, webp. Server validates MIME/file type, not just filename."
+          },
+          "checklist[0][content]": {
+            "type": "string",
+            "maxLength": 500,
+            "description": "First checklist item. Repeat indexed fields with [1], [2], etc., up to [49] for more items."
+          },
+          "checklist[0][is_completed]": {
+            "type": "integer",
+            "enum": [
+              0,
+              1
+            ],
+            "description": "Optional first-item completion flag; defaults to 0."
+          },
+          "checklist[0][assigned_to]": {
+            "type": "integer",
+            "minimum": 1,
+            "description": "Optional first-item assignee ID."
+          },
+          "request_context[page]": {
+            "type": "string",
+            "description": "Example context key. Use request_context[your_key] to send other metadata fields."
+          }
+        },
+        "description": "Supply either a non-empty board_id or board_slug, not both. Both may be omitted or null for backlog. A category with a department must match department_id; a category with no department is allowed. Active records are required. Non-null ticket/checklist assignees must be active admin, super_admin, or technician users and have access to the selected board. Explicit null for one board selector does not conflict with the other. Nested form fields use PHP bracket notation, not JSON strings. The interactive example exposes checklist index 0 and context key page; clients may send additional indices/keys. Omit optional fields rather than sending empty strings for numeric fields."
+      },
+      "ChecklistItem": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer"
+          },
+          "content": {
+            "type": "string"
+          },
+          "is_completed": {
+            "type": "boolean"
+          },
+          "assigned_to": {
+            "type": "integer",
+            "nullable": true
+          },
+          "position": {
+            "type": "integer"
+          }
+        },
+        "description": "Persisted checklist fields returned by the model; position numbering is determined by TicketService, not this controller."
+      },
+      "TicketCreated": {
+        "type": "object",
+        "properties": {
+          "success": {
+            "type": "boolean",
+            "enum": [
+              true
+            ]
+          },
+          "message": {
+            "type": "string",
+            "example": "Ticket created successfully."
+          },
+          "data": {
+            "type": "object",
+            "properties": {
+              "ticket_id": {
+                "description": "Identifier returned by TicketService; concrete type/format not specified in the supplied controller."
+              },
+              "uuid": {
+                "type": "string"
+              },
+              "status": {
+                "type": "string",
+                "description": "Status from persisted ticket; allowed values are not specified by this controller."
+              },
+              "priority": {
+                "type": "string",
+                "enum": [
+                  "low",
+                  "medium",
+                  "high",
+                  "critical"
+                ],
+                "default": "medium"
+              },
+              "board_id": {
+                "type": "integer",
+                "nullable": true
+              },
+              "board_slug": {
+                "type": "string",
+                "nullable": true
+              },
+              "assignee_id": {
+                "type": "integer",
+                "nullable": true,
+                "description": "First ticket assignee user ID, or null."
+              },
+              "checklist_count": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "checklist": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/ChecklistItem"
+                }
+              },
+              "external_reference": {
+                "type": "string",
+                "nullable": true
+              },
+              "url": {
+                "type": "string",
+                "format": "uri",
+                "description": "Application URL /app/ticket/{uuid}."
+              }
+            }
+          }
+        }
+      },
+      "ValidationError": {
+        "type": "object",
+        "properties": {
+          "message": {
+            "type": "string"
+          },
+          "errors": {
+            "type": "object",
+            "additionalProperties": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              }
+            }
+          }
         }
       }
     }
