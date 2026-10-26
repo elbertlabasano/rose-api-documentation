@@ -93,3 +93,19 @@ Official references: [Admin REST API](https://www.keycloak.org/docs-api/latest/r
 Open **Laravel SSO Guide** in the definition dropdown, or visit `esigned-sso-setup.html`. The full Laravel/Keycloak setup guide includes connection settings, the employee claim prerequisites, account linking, controller and route examples, pilot testing, troubleshooting, and rollback. Its Markdown source is `esigned-sso-setup.md`. Both files require the documentation login in production and open without it locally.
 
 The supplied reference has been preserved; it is not a verified deployment or implementation in eSigned. The appended local environment dump was excluded because it contained a client secret and conflicting local settings. No live secrets are included in the published guide.
+
+## Get tickets assigned to a user
+
+The Support Hub definition also includes **GET /api/ticket**, based on `ExternalTicketController::index`. The path is assumed to share the create endpoint URL and must be confirmed in `routes/api.php`; no route file was provided.
+
+Example request (replace the sample user ID):
+
+```http
+GET /api/ticket?assigned_id=3&page=1&per_page=20
+Authorization: Bearer YOUR_SUPPORT_HUB_TOKEN
+Accept: application/json
+```
+
+`assigned_id` is required and must be an existing user ID greater than zero. It differs from the create request's `assignee_id`. `page` defaults to 1; `per_page` defaults to 20 and accepts 1?100. Results are ordered newest first by creation time, then internal ID. The controller does not implement status, board, priority, or date filters.
+
+The HTTP 200 response contains `success`, `data`, `meta` (`current_page`, `last_page`, `per_page`, `total`), and `links` (`next`, `previous`, nullable). Each ticket includes its public identifier, UUID, subject, description, status, priority, type, board ID/details, all assignees, nullable due/created/updated dates, and ticket URL. Checklist items and attachments are not returned. An existing user with no matching tickets gets an empty `data` list. Invalid parameters return 422. Authorization and rate limits depend on deployed middleware; the controller does not restrict queries to the caller's own assigned ID.
