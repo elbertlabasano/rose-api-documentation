@@ -8,7 +8,7 @@ See [setup.md](setup.md) for local PHP and Apache/XAMPP setup instructions and h
 
 For local use, run `php -S localhost:8080 gateway.php` and open <http://localhost:8080/index.html>; no documentation password is required for loopback requests. For local Apache, copy `.htaccess.example` to `.htaccess` and set `DOCS_ENV local`. Production Apache defaults to requiring HTTP Basic Authentication, including direct requests to either OpenAPI JSON file. Follow [setup.md](setup.md) to configure a production bcrypt password file outside the web root and keep `DOCS_ENV production`. API bearer tokens in Swagger remain separate from the documentation login.
 
-Deploy `index.html`, `openapi.json`, `itsupporthub.openapi.json`, `esigned-sso-setup.html`, `esigned-sso-setup.md`, and `gateway.php`. On initial Apache setup, copy `.htaccess.example` to `.htaccess` and configure your own absolute password file path. The local `.htaccess` is ignored by Git; the example is shared. Enable Apache's rewrite/env modules and `.htaccess` overrides as described in setup.md. Use HTTPS for deployed documentation. PHP 8.1+ is required. Previous static Python/Node preview commands do not enforce authentication and have been removed.
+Deploy `index.html`, `openapi.json`, `itsupporthub.openapi.json`, `sms.openapi.json`, `esigned-sso-setup.html`, `esigned-sso-setup.md`, and `gateway.php`. On initial Apache setup, copy `.htaccess.example` to `.htaccess` and configure your own absolute password file path. The local `.htaccess` is ignored by Git; the example is shared. Enable Apache's rewrite/env modules and `.htaccess` overrides as described in setup.md. Use HTTPS for deployed documentation. PHP 8.1+ is required. Previous static Python/Node preview commands do not enforce authentication and have been removed.
 
 ## Multiple APIs and Support Hub tickets
 
@@ -109,3 +109,33 @@ Accept: application/json
 `assigned_id` is required and must be an existing user ID greater than zero. It differs from the create request's `assignee_id`. `page` defaults to 1; `per_page` defaults to 20 and accepts 1?100. Results are ordered newest first by creation time, then internal ID. The controller does not implement status, board, priority, or date filters.
 
 The HTTP 200 response contains `success`, `data`, `meta` (`current_page`, `last_page`, `per_page`, `total`), and `links` (`next`, `previous`, nullable). Each ticket includes its public identifier, UUID, subject, description, status, priority, type, board ID/details, all assignees, nullable due/created/updated dates, and ticket URL. Checklist items and attachments are not returned. An existing user with no matching tickets gets an empty `data` list. Invalid parameters return 422. Authorization and rate limits depend on deployed middleware; the controller does not restrict queries to the caller's own assigned ID.
+
+## SMS gateway
+
+Select **SMS Gateway - Messages and Devices** in the definition dropdown. The specification `sms.openapi.json` uses `https://sms.rosebakeshop.net` and was derived from `rose-web-socket/server.js` and `src/store.js`. The production domain/proxy has not been verified and no live SMS or registration was performed.
+
+Use **Authorize** with the SMS gateway's configured `API_TOKEN`. This is separate from Keycloak, Support Hub, and the documentation login.
+
+| Action | Method | Path |
+| --- | --- | --- |
+| Create device | POST | `/devices` |
+| List devices and connection state | GET | `/devices` |
+| Save and queue outbound SMS | POST | `/sms` |
+| Get SMS/status | GET | `/sms/{messageId}` |
+
+Create a device using `{"id":"tablet-1","name":"Office tablet"}`. HTTP 201 returns its ID and generated device token; store that token securely on the device because it cannot be retrieved later. A native device connects to `wss://sms.rosebakeshop.net/device?deviceId=tablet-1` with `Authorization: Bearer DEVICE_TOKEN` in its WebSocket handshake. Creating a device alone does not connect it or send messages.
+
+Save an SMS using:
+
+```json
+{
+  "requestId": "order-123-notification",
+  "to": "+639171234567",
+  "body": "Your order is ready.",
+  "deviceId": "tablet-1"
+}
+```
+
+Omit `deviceId` for automatic routing. **Saving queues the SMS and can immediately trigger sending through a connected device.** HTTP 202 means persisted/accepted, not delivered. Retrying identical recipient/body/requested device with the same `requestId` returns the saved message (HTTP 200); a different payload with the same ID returns 409. Use the returned `id`, not `requestId`, for status lookup. States are queued, dispatched, sent, failed, and unknown. Unknown messages are not automatically resent, and sent confirms device-reported sending rather than recipient delivery.
+
+Swagger includes request validation, the 16 KiB JSON body limit, responses, and examples. Cross-origin browser execution requires deployment-level CORS support; the inspected Node HTTP handler does not itself implement CORS/OPTIONS handling. Backend clients can call the API directly.

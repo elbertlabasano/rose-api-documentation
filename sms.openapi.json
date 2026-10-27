@@ -1,0 +1,606 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "Rose SMS Gateway",
+    "version": "1.0.0",
+    "description": "HTTP endpoints documented from rose-web-socket/server.js and src/store.js. Server domain supplied by the owner; HTTPS deployment and proxy paths have not been verified. POST /sms saves and queues a message and can dispatch it immediately to a connected device; this is not a draft-only save. Use the gateway API_TOKEN for HTTP requests. Device tokens returned by registration authenticate the device WebSocket connection only. No live SMS or device registration was performed."
+  },
+  "servers": [
+    {
+      "url": "https://sms.rosebakeshop.net",
+      "description": "Production SMS gateway (deployment unverified)"
+    }
+  ],
+  "tags": [
+    {
+      "name": "SMS"
+    },
+    {
+      "name": "Devices"
+    }
+  ],
+  "security": [
+    {
+      "gatewayBearer": []
+    }
+  ],
+  "paths": {
+    "/devices": {
+      "post": {
+        "tags": [
+          "Devices"
+        ],
+        "operationId": "createSmsDevice",
+        "summary": "Create/register an SMS device",
+        "description": "Registers a unique device ID and generates a random 64-character hexadecimal device token. Store the returned token securely on the device: only its hash is persisted, and the listing endpoint cannot retrieve it. Registration does not connect the device. Connect a native WebSocket client to wss://sms.rosebakeshop.net/device?deviceId=YOUR_DEVICE_ID using Authorization: Bearer DEVICE_TOKEN. Browser WebSocket clients cannot supply this custom handshake header. The HTTP bearer credential remains API_TOKEN, not the device token. JSON request body limit is 16384 bytes.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/CreateDevice"
+              },
+              "examples": {
+                "registerDevice": {
+                  "value": {
+                    "id": "tablet-1",
+                    "name": "Office tablet"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Missing or incorrect gateway API bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected service or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Internal server error"
+                }
+              }
+            }
+          },
+          "201": {
+            "description": "Device registered; save the token from this response.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/DeviceCreated"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON/object, invalid device ID, or blank/oversized name.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Provide device id and name"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "The device ID is already registered.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Device already exists"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "JSON body exceeds 16384 bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Request too large"
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "tags": [
+          "Devices"
+        ],
+        "operationId": "listSmsDevices",
+        "summary": "List registered devices and connection state",
+        "description": "Lists device IDs, names, last-seen timestamps, and whether each device currently has a WebSocket connection. Tokens are never returned.",
+        "responses": {
+          "401": {
+            "description": "Missing or incorrect gateway API bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected service or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Internal server error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Registered devices.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "devices": {
+                      "type": "array",
+                      "items": {
+                        "$ref": "#/components/schemas/Device"
+                      }
+                    }
+                  }
+                },
+                "example": {
+                  "devices": [
+                    {
+                      "id": "tablet-1",
+                      "name": "Office tablet",
+                      "lastSeenAt": null,
+                      "connected": false
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sms": {
+      "post": {
+        "tags": [
+          "SMS"
+        ],
+        "operationId": "saveAndQueueSms",
+        "summary": "Save and queue an SMS for sending",
+        "description": "Persists an outbound SMS, then attempts dispatch to a connected device. Omit deviceId for automatic routing; supply a registered ID to target one device. Offline messages remain queued. requestId identifies one logical send: repeating the same requestId, to, body, and requested deviceId returns the existing message (200); changing any of these values for that ID returns 409. JSON body limit is 16384 bytes. Status sent means the device reports successful sending, not recipient delivery. unknown indicates sending was not confirmed and is never automatically resent; a later device result can resolve it. Do not retry an ambiguous send with a new requestId.",
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/SaveSms"
+              },
+              "examples": {
+                "automaticDevice": {
+                  "value": {
+                    "requestId": "order-123-notification",
+                    "to": "+639171234567",
+                    "body": "Your order is ready."
+                  }
+                },
+                "specificDevice": {
+                  "value": {
+                    "requestId": "order-124-notification",
+                    "deviceId": "tablet-1",
+                    "to": "+639171234567",
+                    "body": "Your order is ready."
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "401": {
+            "description": "Missing or incorrect gateway API bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected service or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Internal server error"
+                }
+              }
+            }
+          },
+          "202": {
+            "description": "New message persisted and accepted for asynchronous sending; not a delivery confirmation.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsMessage"
+                },
+                "example": {
+                  "id": "11111111-1111-4111-8111-111111111111",
+                  "requestId": "order-123-notification",
+                  "deviceId": null,
+                  "to": "+639171234567",
+                  "body": "Your order is ready.",
+                  "status": "queued",
+                  "error": null,
+                  "createdAt": "2026-10-27T01:00:00.000Z",
+                  "updatedAt": "2026-10-27T01:00:00.000Z",
+                  "sentAt": null
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Identical requestId and payload already exist; returns the current message without creating another.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsMessage"
+                },
+                "example": {
+                  "id": "11111111-1111-4111-8111-111111111111",
+                  "requestId": "order-123-notification",
+                  "deviceId": null,
+                  "to": "+639171234567",
+                  "body": "Your order is ready.",
+                  "status": "queued",
+                  "error": null,
+                  "createdAt": "2026-10-27T01:00:00.000Z",
+                  "updatedAt": "2026-10-27T01:00:00.000Z",
+                  "sentAt": null
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "Invalid JSON/object or invalid request fields. requestId must be 1?200 ASCII characters from ! through ~ (no spaces).",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Expected a JSON object"
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "The requested deviceId does not exist.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Device not found"
+                }
+              }
+            }
+          },
+          "409": {
+            "description": "requestId already exists with different recipient, message body, or requested device.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "requestId already used for another message"
+                }
+              }
+            }
+          },
+          "413": {
+            "description": "JSON body exceeds 16384 bytes.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Request too large"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/sms/{messageId}": {
+      "get": {
+        "tags": [
+          "SMS"
+        ],
+        "operationId": "getSmsStatus",
+        "summary": "Get a saved SMS and its current status",
+        "parameters": [
+          {
+            "name": "messageId",
+            "in": "path",
+            "required": true,
+            "description": "Message id returned by POST /sms; not requestId.",
+            "schema": {
+              "type": "string"
+            },
+            "example": "11111111-1111-4111-8111-111111111111"
+          }
+        ],
+        "responses": {
+          "401": {
+            "description": "Missing or incorrect gateway API bearer token.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Unauthorized"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "Unexpected service or database failure.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Internal server error"
+                }
+              }
+            }
+          },
+          "200": {
+            "description": "Saved message and current status.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/SmsMessage"
+                },
+                "example": {
+                  "id": "11111111-1111-4111-8111-111111111111",
+                  "requestId": "order-123-notification",
+                  "deviceId": null,
+                  "to": "+639171234567",
+                  "body": "Your order is ready.",
+                  "status": "queued",
+                  "error": null,
+                  "createdAt": "2026-10-27T01:00:00.000Z",
+                  "updatedAt": "2026-10-27T01:00:00.000Z",
+                  "sentAt": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "No message exists with this ID.",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                },
+                "example": {
+                  "error": "Message not found"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "gatewayBearer": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "Gateway API_TOKEN configured on the SMS server. Paste the token only. This is separate from documentation Basic Auth, Keycloak tokens, and device WebSocket tokens."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "string"
+          }
+        }
+      },
+      "CreateDevice": {
+        "type": "object",
+        "required": [
+          "id",
+          "name"
+        ],
+        "properties": {
+          "id": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,100}$",
+            "maxLength": 100,
+            "description": "Unique ID with letters, numbers, underscores, and hyphens only."
+          },
+          "name": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S",
+            "description": "Must contain non-whitespace characters. The server checks JavaScript string length (UTF-16 code units)."
+          }
+        }
+      },
+      "DeviceCreated": {
+        "type": "object",
+        "required": [
+          "id",
+          "token"
+        ],
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "token": {
+            "type": "string",
+            "pattern": "^[a-f0-9]{64}$",
+            "description": "Newly generated device credential. Returned at creation; keep private."
+          }
+        }
+      },
+      "Device": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string"
+          },
+          "name": {
+            "type": "string"
+          },
+          "lastSeenAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          },
+          "connected": {
+            "type": "boolean"
+          }
+        }
+      },
+      "SaveSms": {
+        "type": "object",
+        "required": [
+          "requestId",
+          "to",
+          "body"
+        ],
+        "properties": {
+          "requestId": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "^[\\x21-\\x7e]{1,200}$",
+            "description": "Stable unique logical-send identifier. Printable ASCII without spaces. Reuse only with identical payload."
+          },
+          "to": {
+            "type": "string",
+            "pattern": "^\\+[1-9]\\d{6,14}$",
+            "example": "+639171234567",
+            "description": "International phone number starting with +, followed by 7?15 digits; first digit nonzero."
+          },
+          "body": {
+            "type": "string",
+            "minLength": 1,
+            "maxLength": 1600,
+            "pattern": "\\S",
+            "description": "Nonblank message, at most 1600 JavaScript UTF-16 code units. Device/modem limitations may be stricter."
+          },
+          "deviceId": {
+            "type": "string",
+            "pattern": "^[a-zA-Z0-9_-]{1,100}$",
+            "maxLength": 100,
+            "description": "Optional registered device ID. Omit for automatic routing; null is not accepted."
+          }
+        }
+      },
+      "SmsMessage": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "requestId": {
+            "type": "string"
+          },
+          "deviceId": {
+            "type": "string",
+            "nullable": true,
+            "description": "Assigned device ID, otherwise requested device ID; null if neither is selected."
+          },
+          "to": {
+            "type": "string"
+          },
+          "body": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "queued",
+              "dispatched",
+              "sent",
+              "failed",
+              "unknown"
+            ]
+          },
+          "error": {
+            "type": "string",
+            "nullable": true
+          },
+          "createdAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "updatedAt": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "sentAt": {
+            "type": "string",
+            "format": "date-time",
+            "nullable": true
+          }
+        }
+      }
+    }
+  }
+}

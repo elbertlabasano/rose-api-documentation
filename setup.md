@@ -1,6 +1,6 @@
 # Local setup
 
-This project serves Swagger documentation for Keycloak SSO and IT Support Hub. It does not run either API locally: requests executed from Swagger go to the configured production servers.
+This project serves Swagger documentation for Keycloak SSO, IT Support Hub, and the SMS gateway. It does not run either API locally: requests executed from Swagger go to the configured production servers.
 
 ## Option 1: PHP development server
 
@@ -73,12 +73,13 @@ php -S localhost:8080 gateway.php
 
 ## Required files
 
-Keep these seven files together in the served directory:
+Keep these eight files together in the served directory:
 
 ```text
 index.html
 openapi.json
 itsupporthub.openapi.json
+sms.openapi.json
 esigned-sso-setup.html
 esigned-sso-setup.md
 gateway.php
@@ -104,6 +105,8 @@ For Keycloak, replace `YOUR_REALM` in requests with your actual realm name. Use 
 
 For Support Hub, select its documentation and enter your Support Hub API token in **Authorize**. Expand **POST /api/ticket** to review the create-ticket request. Replace the sample requester and department/category IDs with valid values for your application. The request contract is based on the supplied ExternalTicketController. Select JSON without files or multipart/form-data for attachments; checklist form fields use bracket notation. Route/middleware configuration and the live deployment have not been verified.
 
+For SMS, select **SMS Gateway - Messages and Devices** and authorize with the SMS server's `API_TOKEN`. Create a device with `POST /devices` or save/queue an SMS with `POST /sms`. Saving may send a real message through a connected device. See README.md for device tokens and request deduplication.
+
 Paste tokens without the `Bearer` prefix. Click **Try it out** and **Execute** only when you intend to send the request. User changes and ticket creation affect the configured production systems. Running this documentation locally does not make the APIs local.
 
 ## Troubleshooting
@@ -112,7 +115,7 @@ Paste tokens without the `Bearer` prefix. Click **Try it out** and **Execute** o
 - **Production documentation loads without a password:** Confirm `DOCS_ENV` is `production` and check that `.htaccess` is enabled on Apache or `gateway.php` is used with the PHP development server. Test in a private browser window and request `openapi.json` directly too; unauthenticated requests must return 401.
 - **Apache returns 500:** Check the error log for disabled rewrite/env modules or disallowed `.htaccess` directives.
 - **Blank Swagger page:** Check internet access and the browser console for blocked CDN scripts or styles.
-- **Failed to load API definition:** Keep the seven required files in the same directory. Check that `/openapi.json` and `/itsupporthub.openapi.json` load under the same local folder URL as `index.html`.
+- **Failed to load API definition:** Keep the eight required files in the same directory. Check that `/openapi.json` and `/itsupporthub.openapi.json` load under the same local folder URL as `index.html`.
 - **Failed to fetch / CORS error when executing:** The API server must allow requests from your local documentation origin. Serving Swagger locally does not bypass CORS. Use Postman or a trusted backend if browser requests are not allowed.
 - **401 or 403:** Check the token for the selected API, its expiry, and its permissions.
 - **Support Hub returns 422:** Review the returned validation errors and confirm requester details and active department/category/board IDs.
