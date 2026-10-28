@@ -2,8 +2,8 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Rose SMS Gateway",
-    "version": "1.0.0",
-    "description": "HTTP endpoints documented from rose-web-socket/server.js and src/store.js. Server domain supplied by the owner; HTTPS deployment and proxy paths have not been verified. POST /sms saves and queues a message and can dispatch it immediately to a connected device; this is not a draft-only save. Use the gateway API_TOKEN for HTTP requests. Device tokens returned by registration authenticate the device WebSocket connection only. No live SMS or device registration was performed."
+    "version": "1.1.0",
+    "description": "HTTP endpoints documented from rose-web-socket/server.js, src/store.js, and src/dispatch-limiter.js. Server domain supplied by the owner; HTTPS deployment and proxy paths have not been verified. POST /sms saves and queues a message and can dispatch it immediately to a connected device; this is not a draft-only save. Use the gateway API_TOKEN for HTTP requests. Device tokens returned by registration authenticate the device WebSocket connection only. No live SMS or device registration was performed."
   },
   "servers": [
     {
@@ -201,7 +201,7 @@
         ],
         "operationId": "saveAndQueueSms",
         "summary": "Save and queue an SMS for sending",
-        "description": "Persists an outbound SMS, then attempts dispatch to a connected device. Omit deviceId for automatic routing; supply a registered ID to target one device. Offline messages remain queued. requestId identifies one logical send: repeating the same requestId, to, body, and requested deviceId returns the existing message (200); changing any of these values for that ID returns 409. JSON body limit is 16384 bytes. Status sent means the device reports successful sending, not recipient delivery. unknown indicates sending was not confirmed and is never automatically resent; a later device result can resolve it. Do not retry an ambiguous send with a new requestId.",
+        "description": "Persists an outbound SMS, then attempts dispatch to a connected device when its dispatch cooldown permits. Omit deviceId for automatic routing; supply a registered ID to target one device. Offline or cooldown-delayed messages remain queued.\n\n### Dispatch pacing\nEach device has at least 3 seconds between dispatch attempts (at most 20 SMS jobs per minute), with only one outstanding job per device. A slow modem or delayed result can reduce throughput further. Queued jobs resume automatically; the service checks dispatch opportunities every second. The process also waits 3 seconds after startup, and per-device cooldowns survive device reconnects within that process. Failed/unknown attempts consume a dispatch slot; result replays and duplicate API requests do not create another dispatch slot for the same job. This is an in-memory, single-process dispatch limit, not an HTTP request limit: accepted jobs are queued, not rejected with 429 because of device cooldown. It limits jobs, not multipart SMS segments or confirmed handset delivery.\n\n### Request deduplication\nrequestId identifies one logical send: repeating the same requestId, to, body, and requested deviceId returns the existing message (200); changing recipient, body, or requested device for that ID returns 409. JSON body limit is 16384 bytes. Do not retry an ambiguous send with a new requestId.\n\n### Status\n202 confirms persistence/acceptance, not immediate dispatch or delivery. Status sent means the device reports successful sending, not recipient delivery. unknown indicates sending was not confirmed and is never automatically resent; a later device result can resolve it. Use GET /sms/{messageId} to inspect current status.",
         "requestBody": {
           "required": true,
           "content": {
@@ -257,7 +257,7 @@
             }
           },
           "202": {
-            "description": "New message persisted and accepted for asynchronous sending; not a delivery confirmation.",
+            "description": "New message persisted and accepted into the queue. Dispatch may wait for an online device, its current job, startup cooldown, or the 3-second per-device dispatch interval. Not a delivery confirmation.",
             "content": {
               "application/json": {
                 "schema": {
@@ -279,7 +279,7 @@
             }
           },
           "200": {
-            "description": "Identical requestId and payload already exist; returns the current message without creating another.",
+            "description": "Identical requestId and payload already exist; returns the current persisted message without creating another job. Its status can be queued, dispatched, sent, failed, or unknown.",
             "content": {
               "application/json": {
                 "schema": {
@@ -301,14 +301,28 @@
             }
           },
           "400": {
-            "description": "Invalid JSON/object or invalid request fields. requestId must be 1?200 ASCII characters from ! through ~ (no spaces).",
+            "description": "Invalid JSON, non-object JSON, or invalid request fields. requestId must be 1-200 ASCII characters from ! through ~ (no spaces).",
             "content": {
               "application/json": {
                 "schema": {
                   "$ref": "#/components/schemas/Error"
                 },
-                "example": {
-                  "error": "Expected a JSON object"
+                "examples": {
+                  "invalidFields": {
+                    "value": {
+                      "error": "Provide requestId (1?200 printable ASCII characters), to (+ international number), body (1?1600 characters), and optional deviceId"
+                    }
+                  },
+                  "invalidJson": {
+                    "value": {
+                      "error": "Invalid JSON"
+                    }
+                  },
+                  "invalidObject": {
+                    "value": {
+                      "error": "Expected a JSON object"
+                    }
+                  }
                 }
               }
             }
@@ -436,7 +450,8 @@
               }
             }
           }
-        }
+        },
+        "description": "Returns the current persisted message. Messages can remain queued while waiting for a connected device, its outstanding job, or the dispatch cooldown (at least 3 seconds between attempts per device)."
       }
     }
   },
@@ -534,7 +549,7 @@
             "type": "string",
             "pattern": "^\\+[1-9]\\d{6,14}$",
             "example": "+639171234567",
-            "description": "International phone number starting with +, followed by 7?15 digits; first digit nonzero."
+            "description": "International phone number starting with +, followed by 7-15 digits; first digit nonzero."
           },
           "body": {
             "type": "string",
@@ -580,7 +595,8 @@
               "sent",
               "failed",
               "unknown"
-            ]
+            ],
+            "description": "queued: awaiting an eligible connected/idle device and dispatch cooldown; dispatched: command sent, awaiting device result; sent: device reported sending (not recipient delivery); failed: device reported failure; unknown: confirmation missing or ambiguous, never automatically resent."
           },
           "error": {
             "type": "string",

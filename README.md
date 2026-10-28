@@ -139,3 +139,9 @@ Save an SMS using:
 Omit `deviceId` for automatic routing. **Saving queues the SMS and can immediately trigger sending through a connected device.** HTTP 202 means persisted/accepted, not delivered. Retrying identical recipient/body/requested device with the same `requestId` returns the saved message (HTTP 200); a different payload with the same ID returns 409. Use the returned `id`, not `requestId`, for status lookup. States are queued, dispatched, sent, failed, and unknown. Unknown messages are not automatically resent, and sent confirms device-reported sending rather than recipient delivery.
 
 Swagger includes request validation, the 16 KiB JSON body limit, responses, and examples. Cross-origin browser execution requires deployment-level CORS support; the inspected Node HTTP handler does not itself implement CORS/OPTIONS handling. Backend clients can call the API directly.
+
+### SMS dispatch pacing
+
+The updated server paces each device at one dispatch attempt per 3 seconds (at most 20 jobs per minute), with one outstanding job at a time. Slow device results can reduce throughput. It waits 3 seconds after startup and retains device cooldowns through reconnects; failed/unknown attempts consume a slot. Waiting jobs remain queued and dispatch opportunities are checked every second. Duplicate POST requests return the existing job and do not create another job.
+
+This is a single-process, in-memory device dispatch limit, not an HTTP request limit or a 429 response condition. POST /sms still returns 202 for a newly saved job and 200 for an identical repeated request. Its request fields and response shape have not changed. The pacing counts jobs, not multipart SMS segments or recipient delivery. Production behavior was not exercised while updating the documentation.
