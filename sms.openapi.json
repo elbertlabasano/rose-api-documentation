@@ -2,7 +2,7 @@
   "openapi": "3.0.3",
   "info": {
     "title": "Rose SMS Gateway",
-    "version": "1.1.0",
+    "version": "1.2.0",
     "description": "HTTP endpoints documented from rose-web-socket/server.js, src/store.js, and src/dispatch-limiter.js. Server domain supplied by the owner; HTTPS deployment and proxy paths have not been verified. POST /sms saves and queues a message and can dispatch it immediately to a connected device; this is not a draft-only save. Use the gateway API_TOKEN for HTTP requests. Device tokens returned by registration authenticate the device WebSocket connection only. No live SMS or device registration was performed."
   },
   "servers": [
@@ -201,7 +201,7 @@
         ],
         "operationId": "saveAndQueueSms",
         "summary": "Save and queue an SMS for sending",
-        "description": "Persists an outbound SMS, then attempts dispatch to a connected device when its dispatch cooldown permits. Omit deviceId for automatic routing; supply a registered ID to target one device. Offline or cooldown-delayed messages remain queued.\n\n### Dispatch pacing\nEach device has at least 3 seconds between dispatch attempts (at most 20 SMS jobs per minute), with only one outstanding job per device. A slow modem or delayed result can reduce throughput further. Queued jobs resume automatically; the service checks dispatch opportunities every second. The process also waits 3 seconds after startup, and per-device cooldowns survive device reconnects within that process. Failed/unknown attempts consume a dispatch slot; result replays and duplicate API requests do not create another dispatch slot for the same job. This is an in-memory, single-process dispatch limit, not an HTTP request limit: accepted jobs are queued, not rejected with 429 because of device cooldown. It limits jobs, not multipart SMS segments or confirmed handset delivery.\n\n### Request deduplication\nrequestId identifies one logical send: repeating the same requestId, to, body, and requested deviceId returns the existing message (200); changing recipient, body, or requested device for that ID returns 409. JSON body limit is 16384 bytes. Do not retry an ambiguous send with a new requestId.\n\n### Status\n202 confirms persistence/acceptance, not immediate dispatch or delivery. Status sent means the device reports successful sending, not recipient delivery. unknown indicates sending was not confirmed and is never automatically resent; a later device result can resolve it. Use GET /sms/{messageId} to inspect current status.",
+        "description": "Persists an outbound SMS, then attempts dispatch to a connected device when its dispatch cooldown permits. Omit deviceId for automatic routing; supply a registered ID to target one device. Offline or cooldown-delayed messages remain queued.\n\n### Dispatch pacing\nEach device has at least 3 seconds between dispatch attempts (at most 20 SMS jobs per minute), with only one outstanding job per device. A slow modem or delayed result can reduce throughput further. Queued jobs resume automatically; the service checks dispatch opportunities every second. The process also waits 3 seconds after startup, and per-device cooldowns survive device reconnects within that process. Failed/unknown attempts consume a dispatch slot; result replays and duplicate API requests do not create another dispatch slot for the same job. This is an in-memory, single-process dispatch limit, not an HTTP request limit: accepted jobs are queued, not rejected with 429 because of device cooldown. It limits jobs, not multipart SMS segments or confirmed handset delivery.\n\n### Request deduplication\nrequestId identifies one logical send: repeating the same requestId, to, body, requested deviceId, and source metadata returns the existing message (200); changing recipient, body, requested device, or source metadata for that ID returns 409. JSON body limit is 16384 bytes. Do not retry an ambiguous send with a new requestId.\n\n### Status\n202 confirms persistence/acceptance, not immediate dispatch or delivery. Status sent means the device reports successful sending, not recipient delivery. unknown indicates sending was not confirmed and is never automatically resent; a later device result can resolve it. Use GET /sms/{messageId} to inspect current status.\n\n### Source metadata\nOptional JSON fields are source (up to 100 Unicode code points), sourceId (up to 200), and sourceRequestType (up to 100). Values must be nonblank strings or null; numeric sourceId values must be quoted strings. Omitted fields are stored/returned as null. Use camelCase in requests and responses: source_id and source_request_type are database column names, not the API field names. Source values are stored unchanged, not trimmed. Multiple SMS jobs can share the same source metadata; requestId remains the global unique logical-send key. Reusing requestId with changed source metadata returns 409; omitted and null metadata are equivalent. Source metadata is persisted but is not sent to devices in the sms.send WebSocket command.",
         "requestBody": {
           "required": true,
           "content": {
@@ -210,6 +210,17 @@
                 "$ref": "#/components/schemas/SaveSms"
               },
               "examples": {
+                "withSourceMetadata": {
+                  "summary": "SMS with originating application and record",
+                  "value": {
+                    "requestId": "order-127-ready",
+                    "source": "branch_ordering",
+                    "sourceId": "127",
+                    "sourceRequestType": "order_ready",
+                    "to": "+639171234567",
+                    "body": "Your order is ready."
+                  }
+                },
                 "automaticDevice": {
                   "value": {
                     "requestId": "order-123-notification",
@@ -222,7 +233,10 @@
                     "requestId": "order-124-notification",
                     "deviceId": "tablet-1",
                     "to": "+639171234567",
-                    "body": "Your order is ready."
+                    "body": "Your order is ready.",
+                    "source": "branch_ordering",
+                    "sourceId": "127",
+                    "sourceRequestType": "order_ready"
                   }
                 }
               }
@@ -265,7 +279,7 @@
                 },
                 "example": {
                   "id": "11111111-1111-4111-8111-111111111111",
-                  "requestId": "order-123-notification",
+                  "requestId": "order-127-ready",
                   "deviceId": null,
                   "to": "+639171234567",
                   "body": "Your order is ready.",
@@ -273,7 +287,10 @@
                   "error": null,
                   "createdAt": "2026-10-27T01:00:00.000Z",
                   "updatedAt": "2026-10-27T01:00:00.000Z",
-                  "sentAt": null
+                  "sentAt": null,
+                  "source": "branch_ordering",
+                  "sourceId": "127",
+                  "sourceRequestType": "order_ready"
                 }
               }
             }
@@ -287,7 +304,7 @@
                 },
                 "example": {
                   "id": "11111111-1111-4111-8111-111111111111",
-                  "requestId": "order-123-notification",
+                  "requestId": "order-127-ready",
                   "deviceId": null,
                   "to": "+639171234567",
                   "body": "Your order is ready.",
@@ -295,13 +312,16 @@
                   "error": null,
                   "createdAt": "2026-10-27T01:00:00.000Z",
                   "updatedAt": "2026-10-27T01:00:00.000Z",
-                  "sentAt": null
+                  "sentAt": null,
+                  "source": "branch_ordering",
+                  "sourceId": "127",
+                  "sourceRequestType": "order_ready"
                 }
               }
             }
           },
           "400": {
-            "description": "Invalid JSON, non-object JSON, or invalid request fields. requestId must be 1-200 ASCII characters from ! through ~ (no spaces).",
+            "description": "Invalid JSON, non-object JSON, or invalid request fields. requestId must be 1-200 ASCII characters from ! through ~ (no spaces). Source fields must be null or nonblank strings within their respective limits.",
             "content": {
               "application/json": {
                 "schema": {
@@ -322,6 +342,11 @@
                     "value": {
                       "error": "Expected a JSON object"
                     }
+                  },
+                  "invalidSourceMetadata": {
+                    "value": {
+                      "error": "source, sourceId, and sourceRequestType must be null or non-blank strings of at most 100, 200, and 100 characters respectively"
+                    }
                   }
                 }
               }
@@ -341,7 +366,7 @@
             }
           },
           "409": {
-            "description": "requestId already exists with different recipient, message body, or requested device.",
+            "description": "requestId already exists with different recipient, body, requested device, source, sourceId, or sourceRequestType. Omitted and null source values compare equally.",
             "content": {
               "application/json": {
                 "schema": {
@@ -424,7 +449,7 @@
                 },
                 "example": {
                   "id": "11111111-1111-4111-8111-111111111111",
-                  "requestId": "order-123-notification",
+                  "requestId": "order-127-ready",
                   "deviceId": null,
                   "to": "+639171234567",
                   "body": "Your order is ready.",
@@ -432,7 +457,10 @@
                   "error": null,
                   "createdAt": "2026-10-27T01:00:00.000Z",
                   "updatedAt": "2026-10-27T01:00:00.000Z",
-                  "sentAt": null
+                  "sentAt": null,
+                  "source": "branch_ordering",
+                  "sourceId": "127",
+                  "sourceRequestType": "order_ready"
                 }
               }
             }
@@ -451,7 +479,7 @@
             }
           }
         },
-        "description": "Returns the current persisted message. Messages can remain queued while waiting for a connected device, its outstanding job, or the dispatch cooldown (at least 3 seconds between attempts per device)."
+        "description": "Returns the current persisted message. Messages can remain queued while waiting for a connected device, its outstanding job, or the dispatch cooldown (at least 3 seconds between attempts per device). Response includes source, sourceId, and sourceRequestType (null when absent)."
       }
     }
   },
@@ -563,7 +591,39 @@
             "pattern": "^[a-zA-Z0-9_-]{1,100}$",
             "maxLength": 100,
             "description": "Optional registered device ID. Omit for automatic routing; null is not accepted."
+          },
+          "source": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "\\S",
+            "description": "Originating application, such as branch_ordering. Optional/null allowed; whitespace-only strings rejected. Unicode code-point limit 100. Stored unchanged."
+          },
+          "sourceId": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S",
+            "description": "Originating business record ID as a string, including numeric IDs. Optional/null allowed; whitespace-only strings rejected. Unicode code-point limit 200. Database column source_id; API uses camelCase sourceId."
+          },
+          "sourceRequestType": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "\\S",
+            "description": "Originating request/event type, such as order_ready. Optional/null allowed; whitespace-only strings rejected. Unicode code-point limit 100. Database column source_request_type; API uses camelCase sourceRequestType."
           }
+        },
+        "example": {
+          "requestId": "order-127-ready",
+          "source": "branch_ordering",
+          "sourceId": "127",
+          "sourceRequestType": "order_ready",
+          "to": "+639171234567",
+          "body": "Your order is ready."
         }
       },
       "SmsMessage": {
@@ -614,6 +674,30 @@
             "type": "string",
             "format": "date-time",
             "nullable": true
+          },
+          "source": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "\\S",
+            "description": "Persisted source metadata, returned by POST /sms and GET /sms/{messageId}; null when not provided. Originating application, such as branch_ordering. Optional/null allowed; whitespace-only strings rejected. Unicode code-point limit 100. Stored unchanged."
+          },
+          "sourceId": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 200,
+            "pattern": "\\S",
+            "description": "Persisted source metadata, returned by POST /sms and GET /sms/{messageId}; null when not provided. Originating business record ID as a string, including numeric IDs. Optional/null allowed; whitespace-only strings rejected. Unicode code-point limit 200. Database column source_id; API uses camelCase sourceId."
+          },
+          "sourceRequestType": {
+            "type": "string",
+            "nullable": true,
+            "minLength": 1,
+            "maxLength": 100,
+            "pattern": "\\S",
+            "description": "Persisted source metadata, returned by POST /sms and GET /sms/{messageId}; null when not provided. Originating request/event type, such as order_ready. Optional/null allowed; whitespace-only strings rejected. Unicode code-point limit 100. Database column source_request_type; API uses camelCase sourceRequestType."
           }
         }
       }
