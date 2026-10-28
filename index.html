@@ -45,7 +45,8 @@
       urls: [
         { url: './openapi.json', name: 'Keycloak SSO — Users' },
         { url: './itsupporthub.openapi.json', name: 'IT Support Hub — Tickets' },
-        { url: './sms.openapi.json', name: 'SMS Gateway - Messages and Devices' }
+        { url: './sms.openapi.json', name: 'SMS Gateway - Messages and Devices' },
+        { url: './storage.openapi.json', name: 'WIPS Storage - Files and Buckets' }
       ],
       'urls.primaryName': 'Keycloak SSO — Users',
       presets: [SwaggerUIBundle.presets.apis, SwaggerUIStandalonePreset],
@@ -54,7 +55,7 @@
       deepLinking: true,
       persistAuthorization: false,
       tryItOutEnabled: false,
-      supportedSubmitMethods: ['get', 'post', 'put'],
+      supportedSubmitMethods: ['get', 'post', 'put', 'patch', 'delete'],
       validatorUrl: null,
       onComplete: addGuideDefinition
     });

@@ -66,6 +66,7 @@ $files = [
     '/openapi.json' => ['openapi.json', 'application/json; charset=utf-8'],
     '/itsupporthub.openapi.json' => ['itsupporthub.openapi.json', 'application/json; charset=utf-8'],
     '/sms.openapi.json' => ['sms.openapi.json', 'application/json; charset=utf-8'],
+    '/storage.openapi.json' => ['storage.openapi.json', 'application/json; charset=utf-8'],
     '/esigned-sso-setup.html' => ['esigned-sso-setup.html', 'text/html; charset=utf-8'],
     '/esigned-sso-setup.md' => ['esigned-sso-setup.md', 'text/plain; charset=utf-8'],
 ];

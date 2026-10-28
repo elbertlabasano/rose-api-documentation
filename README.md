@@ -8,7 +8,7 @@ See [setup.md](setup.md) for local PHP and Apache/XAMPP setup instructions and h
 
 For local use, run `php -S localhost:8080 gateway.php` and open <http://localhost:8080/index.html>; no documentation password is required for loopback requests. For local Apache, copy `.htaccess.example` to `.htaccess` and set `DOCS_ENV local`. Production Apache defaults to requiring HTTP Basic Authentication, including direct requests to either OpenAPI JSON file. Follow [setup.md](setup.md) to configure a production bcrypt password file outside the web root and keep `DOCS_ENV production`. API bearer tokens in Swagger remain separate from the documentation login.
 
-Deploy `index.html`, `openapi.json`, `itsupporthub.openapi.json`, `sms.openapi.json`, `esigned-sso-setup.html`, `esigned-sso-setup.md`, and `gateway.php`. On initial Apache setup, copy `.htaccess.example` to `.htaccess` and configure your own absolute password file path. The local `.htaccess` is ignored by Git; the example is shared. Enable Apache's rewrite/env modules and `.htaccess` overrides as described in setup.md. Use HTTPS for deployed documentation. PHP 8.1+ is required. Previous static Python/Node preview commands do not enforce authentication and have been removed.
+Deploy `index.html`, `openapi.json`, `itsupporthub.openapi.json`, `sms.openapi.json`, `storage.openapi.json`, `esigned-sso-setup.html`, `esigned-sso-setup.md`, and `gateway.php`. On initial Apache setup, copy `.htaccess.example` to `.htaccess` and configure your own absolute password file path. The local `.htaccess` is ignored by Git; the example is shared. Enable Apache's rewrite/env modules and `.htaccess` overrides as described in setup.md. Use HTTPS for deployed documentation. PHP 8.1+ is required. Previous static Python/Node preview commands do not enforce authentication and have been removed.
 
 ## Multiple APIs and Support Hub tickets
 
@@ -145,3 +145,42 @@ Swagger includes request validation, the 16 KiB JSON body limit, responses, and 
 The updated server paces each device at one dispatch attempt per 3 seconds (at most 20 jobs per minute), with one outstanding job at a time. Slow device results can reduce throughput. It waits 3 seconds after startup and retains device cooldowns through reconnects; failed/unknown attempts consume a slot. Waiting jobs remain queued and dispatch opportunities are checked every second. Duplicate POST requests return the existing job and do not create another job.
 
 This is a single-process, in-memory device dispatch limit, not an HTTP request limit or a 429 response condition. POST /sms still returns 202 for a newly saved job and 200 for an identical repeated request. Its request fields and response shape have not changed. The pacing counts jobs, not multipart SMS segments or recipient delivery. Production behavior was not exercised while updating the documentation.
+
+## Using WIPS Storage
+
+Select **WIPS Storage - Files and Buckets** in Swagger. Set its server `baseUrl` to your storage application's origin, without `/api` or a trailing slash. It defaults to `https://storage.rosebakeshop.net`, as supplied by the owner; localhost is also available. The live deployment has not been verified. The definition is based on the actual routes, controllers, configuration, and models in `wips-storage`; it contains 19 API operations. It does not start the storage application or provide AWS S3 protocol compatibility.
+
+1. Open **Authentication ? Log in and get a token** and enter the storage account's email/password. If needed, register with name, email, password (12+ characters), and matching password_confirmation. Login returns `token`; invalid credentials return 422. Successful login replaces prior tokens named `api` for that user.
+2. Paste `token` into **Authorize** without `Bearer`. Storage tokens are separate from Keycloak, Support Hub, SMS, and the documentation login.
+3. **Create a bucket** with `{"name":"media"}`. Save `data.id` (a UUID). Names are 3?63 lowercase letters/digits/dots/hyphens, must start/end alphanumeric, and are unique per owner.
+4. **Upload a file** to `/api/buckets/{bucket}/objects`. Select **Try it out**, fill the bucket UUID, choose a file, and select `private` or `public` visibility. The single file uses multipart field `file`; do not submit JSON or a local pathname string. Default visibility is private. Save the returned object `data.id`.
+5. **Download:** For public files, use `data.public_url` directly. For private access, POST `/api/objects/{object}/private-url` with `{"expires_in":3600}` and use the returned `url` exactly, without adding authentication or altering its signature. The link works until expiry while the object exists. It may be generated for either visibility. Do not share signed URLs beyond intended recipients.
+6. **Manage the file:** GET `/api/objects/{object}` reads metadata, PATCH `/api/objects/{object}/visibility` updates visibility, and DELETE `/api/objects/{object}` removes the file and record. Setting an object private stops fresh public access; previously issued signed URLs still work until expiry and public responses may have been cached for an hour.
+7. **Create an application token** through `/api/access-tokens` with only required abilities, then store it in your backend environment. Its plaintext value is returned only once. Use metadata IDs when revoking tokens, not the full bearer credential.
+
+Example scoped token request:
+
+```json
+{
+  "name": "Application uploader",
+  "abilities": ["buckets:read", "objects:write", "objects:read"],
+  "expires_in": 86400
+}
+```
+
+| Operation | Required token ability |
+| --- | --- |
+| List/read buckets | `buckets:read` |
+| Create bucket | `buckets:write` |
+| Upload or change visibility | `objects:write` |
+| Object metadata or signed URL issuance | `objects:read` |
+| Delete object | `objects:delete` |
+| List/create/revoke access tokens | `tokens:manage` |
+
+The authenticated user must own each bucket/object. Other owners receive 404. Bucket listing returns a paginator nested under `data` (`data.data` is the array), fixed at 50 buckets per page. Bucket details include only the latest 50 objects, while `objects_count` includes all of them.
+
+Default upload limit: 50 MB, configurable via `STORAGE_MAX_UPLOAD_MB`. Allowed content-detected types: jpg, jpeg, png, gif, webp, pdf, txt, csv, doc, docx, xls, xlsx, zip, apk, mp4, mp3. PHP/proxy limits can be lower. Private URL expiry defaults to 3600 seconds and is capped by `PRIVATE_URL_MAX_SECONDS` (86400 by default). Auth routes allow 10 requests/minute/IP, uploads 30/minute/user, and private-link issuance 60/minute/user. Limits come from inspected source, not a verified deployment. CORS must allow your documentation origin for browser execution.
+
+Backup endpoints are also documented. They require a user in `BACKUP_ADMIN_USER_IDS` and a token with literal `*` ability. GET `/api/backups` returns status/recent exports; POST `/api/backups/prepare/{type}` prepares `zip` or `sql`; POST `/api/backups/{id}/download` issues a 10-minute signed download URL. ZIPs are incremental AES-encrypted archives, SQL exports are unencrypted, and Drive upload is manual. Use the returned download URL rather than constructing a URL yourself. These operations can export installation data and are intended for administrators.
+
+No registration, login, upload, deletion, token creation, or backup was performed while preparing this documentation.
