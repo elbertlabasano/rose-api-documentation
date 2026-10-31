@@ -1,0 +1,1927 @@
+{
+  "openapi": "3.0.3",
+  "info": {
+    "title": "WIPS Global Mobile API",
+    "version": "1.0.0",
+    "description": "Bearer-authenticated global JSON API. Mobile trip tracking is separate from ERP custody, dispatch and inventory receiving. See README.md for setup, retry ordering and rate limits.\n\nProduction base URL: https://wips.ph/api/v1. Imported from the WIPS project OpenAPI definition; no live login or tracking changes were performed. See [WIPS API usage guide](./wips-api-guide.md) for setup, offline event/GPS retry ordering, evidence uploads and rate limits. Authenticate with WIPS username/password and an installation UUID, then paste the returned token into Authorize."
+  },
+  "servers": [
+    {
+      "url": "https://wips.ph/api/v1",
+      "description": "Production WIPS API (domain supplied by owner; deployment not verified)."
+    }
+  ],
+  "security": [
+    {
+      "bearerAuth": []
+    }
+  ],
+  "paths": {
+    "/health": {
+      "get": {
+        "operationId": "health",
+        "summary": "Minimal API availability",
+        "responses": {
+          "200": {
+            "description": "Successful request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "status": {
+                          "type": "string"
+                        },
+                        "api_version": {
+                          "type": "string"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "server_time": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "request_id"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "JSON error. 401: sign in again; 409: reconcile conflict; 429: keep queue and honor Retry-After; 500/503: retry safely.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying a rate-limited request.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": []
+      }
+    },
+    "/auth/login": {
+      "post": {
+        "operationId": "login",
+        "summary": "Authenticate a WIPS account and rotate device tokens",
+        "responses": {
+          "200": {
+            "description": "Successful request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/Token"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "server_time": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "request_id"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "JSON error. 401: sign in again; 409: reconcile conflict; 429: keep queue and honor Retry-After; 500/503: retry safely.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying a rate-limited request.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "security": [],
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Login"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/auth/logout": {
+      "post": {
+        "operationId": "logout",
+        "summary": "Revoke current bearer token",
+        "responses": {
+          "200": {
+            "description": "Successful request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "logged_out": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "server_time": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "request_id"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "JSON error. 401: sign in again; 409: reconcile conflict; 429: keep queue and honor Retry-After; 500/503: retry safely.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying a rate-limited request.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me": {
+      "get": {
+        "operationId": "me",
+        "summary": "Current account and device",
+        "responses": {
+          "200": {
+            "description": "Successful request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "id": {
+                          "type": "integer",
+                          "minimum": 1
+                        },
+                        "username": {
+                          "type": "string"
+                        },
+                        "name": {
+                          "type": "string"
+                        },
+                        "driver_employee_id": {
+                          "type": "integer",
+                          "minimum": 1,
+                          "nullable": true
+                        },
+                        "device": {
+                          "type": "object",
+                          "properties": {
+                            "id": {
+                              "type": "string",
+                              "format": "uuid"
+                            },
+                            "name": {
+                              "type": "string"
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "server_time": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "request_id"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "JSON error. 401: sign in again; 409: reconcile conflict; 429: keep queue and honor Retry-After; 500/503: retry safely.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying a rate-limited request.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/me/trips": {
+      "get": {
+        "operationId": "myTrips",
+        "summary": "Assigned non-draft trips",
+        "responses": {
+          "200": {
+            "description": "Successful request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "trips": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/TripHeader"
+                          }
+                        },
+                        "pagination": {
+                          "type": "object",
+                          "properties": {
+                            "page": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "per_page": {
+                              "type": "integer",
+                              "minimum": 1
+                            },
+                            "total": {
+                              "type": "integer",
+                              "minimum": 0
+                            }
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "server_time": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "request_id"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "JSON error. 401: sign in again; 409: reconcile conflict; 429: keep queue and honor Retry-After; 500/503: retry safely.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying a rate-limited request.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            }
+          }
+        ]
+      }
+    },
+    "/trips/{trip_id}": {
+      "parameters": [
+        {
+          "name": "trip_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "operationId": "trip",
+        "summary": "Assigned trip with manifest",
+        "responses": {
+          "200": {
+            "description": "Successful request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "trip": {
+                          "$ref": "#/components/schemas/Manifest"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "server_time": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "request_id"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "JSON error. 401: sign in again; 409: reconcile conflict; 429: keep queue and honor Retry-After; 500/503: retry safely.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying a rate-limited request.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trips/{trip_id}/manifest": {
+      "parameters": [
+        {
+          "name": "trip_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "operationId": "manifest",
+        "summary": "Download an offline manifest; does not reserve or dispatch",
+        "responses": {
+          "200": {
+            "description": "Successful request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "trip": {
+                          "$ref": "#/components/schemas/Manifest"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "server_time": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "request_id"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "JSON error. 401: sign in again; 409: reconcile conflict; 429: keep queue and honor Retry-After; 500/503: retry safely.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying a rate-limited request.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/trips/{trip_id}/events": {
+      "parameters": [
+        {
+          "name": "trip_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "operationId": "tripEvents",
+        "summary": "Accepted events after a cursor, up to 100",
+        "responses": {
+          "200": {
+            "description": "Successful request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "events": {
+                          "type": "array",
+                          "items": {
+                            "allOf": [
+                              {
+                                "$ref": "#/components/schemas/TripEvent"
+                              },
+                              {
+                                "type": "object",
+                                "properties": {
+                                  "id": {
+                                    "type": "integer",
+                                    "minimum": 1
+                                  },
+                                  "received_at": {
+                                    "type": "string",
+                                    "format": "date-time"
+                                  }
+                                }
+                              }
+                            ]
+                          }
+                        },
+                        "next_after_id": {
+                          "type": "integer",
+                          "minimum": 0
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "server_time": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "request_id"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "JSON error. 401: sign in again; 409: reconcile conflict; 429: keep queue and honor Retry-After; 500/503: retry safely.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying a rate-limited request.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "after_id",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 0
+            }
+          }
+        ]
+      },
+      "post": {
+        "operationId": "syncTripEvents",
+        "summary": "Acknowledge ordered offline events individually",
+        "responses": {
+          "200": {
+            "description": "Successful request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "results": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/SyncResult"
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "server_time": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "request_id"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "JSON error. 401: sign in again; 409: reconcile conflict; 429: keep queue and honor Retry-After; 500/503: retry safely.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying a rate-limited request.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/EventBatch"
+              }
+            }
+          }
+        },
+        "description": "HTTP 200 can contain rejected items. Keep those queued. The same UUID and identical payload return duplicate. Stop events need stop_id; skipped/issue events need payload.notes. trip.returned requires payload.last_gps_sequence, with 0 meaning no samples captured. Start requires all ERP shipments in_transit. No event changes stock or receiving."
+      }
+    },
+    "/trips/{trip_id}/gps": {
+      "parameters": [
+        {
+          "name": "trip_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "operationId": "syncTripGPS",
+        "summary": "Upload recorded GPS points; primary trip device only",
+        "responses": {
+          "200": {
+            "description": "Successful request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "results": {
+                          "type": "array",
+                          "items": {
+                            "$ref": "#/components/schemas/SyncResult"
+                          }
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "server_time": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "request_id"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "JSON error. 401: sign in again; 409: reconcile conflict; 429: keep queue and honor Retry-After; 500/503: retry safely.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying a rate-limited request.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/GPSBatch"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shipments/{shipment_id}/delivery-photos": {
+      "parameters": [
+        {
+          "name": "shipment_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "operationId": "uploadDeliveryPhoto",
+        "summary": "Private per-delivery photo upload",
+        "responses": {
+          "200": {
+            "description": "Successful request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/EvidenceResult"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "server_time": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "request_id"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "JSON error. 401: sign in again; 409: reconcile conflict; 429: keep queue and honor Retry-After; 500/503: retry safely.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying a rate-limited request.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "$ref": "#/components/schemas/EvidenceUpload"
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shipments/{shipment_id}/delivery-signatures": {
+      "parameters": [
+        {
+          "name": "shipment_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "post": {
+        "operationId": "uploadDeliverySignature",
+        "summary": "Private per-delivery signature upload",
+        "responses": {
+          "200": {
+            "description": "Successful request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "$ref": "#/components/schemas/EvidenceResult"
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "server_time": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "request_id"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "JSON error. 401: sign in again; 409: reconcile conflict; 429: keep queue and honor Retry-After; 500/503: retry safely.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying a rate-limited request.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "multipart/form-data": {
+              "schema": {
+                "allOf": [
+                  {
+                    "$ref": "#/components/schemas/EvidenceUpload"
+                  },
+                  {
+                    "type": "object",
+                    "properties": {
+                      "kind": {
+                        "type": "string",
+                        "enum": [
+                          "logistics_signature",
+                          "recipient_signature"
+                        ]
+                      }
+                    },
+                    "required": [
+                      "kind"
+                    ]
+                  }
+                ]
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shipments/{shipment_id}/delivery-evidence/{evidence_id}": {
+      "parameters": [
+        {
+          "name": "shipment_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        },
+        {
+          "name": "evidence_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "operationId": "readDeliveryEvidence",
+        "summary": "Read an authorized evidence image",
+        "responses": {
+          "200": {
+            "description": "Private JPEG",
+            "content": {
+              "image/jpeg": {
+                "schema": {
+                  "type": "string",
+                  "format": "binary"
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "JSON error. 401: sign in again; 409: reconcile conflict; 429: keep queue and honor Retry-After; 500/503: retry safely.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying a rate-limited request.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/shipments/{shipment_id}/delivery-confirmations": {
+      "parameters": [
+        {
+          "name": "shipment_id",
+          "in": "path",
+          "required": true,
+          "schema": {
+            "type": "integer",
+            "minimum": 1
+          }
+        }
+      ],
+      "get": {
+        "operationId": "readDeliveryConfirmation",
+        "summary": "Read immutable proof",
+        "responses": {
+          "200": {
+            "description": "Successful request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "confirmation": {
+                          "allOf": [
+                            {
+                              "$ref": "#/components/schemas/Confirmation"
+                            },
+                            {
+                              "type": "object",
+                              "properties": {
+                                "shipment_id": {
+                                  "type": "integer",
+                                  "minimum": 1
+                                },
+                                "received_at": {
+                                  "type": "string",
+                                  "format": "date-time"
+                                }
+                              }
+                            }
+                          ]
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "server_time": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "request_id"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "JSON error. 401: sign in again; 409: reconcile conflict; 429: keep queue and honor Retry-After; 500/503: retry safely.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying a rate-limited request.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "parameters": [
+          {
+            "name": "trip_id",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "minimum": 1
+            },
+            "required": true
+          }
+        ]
+      },
+      "post": {
+        "operationId": "confirmDeliveryProof",
+        "summary": "Record proof without performing inventory receiving",
+        "responses": {
+          "200": {
+            "description": "Successful request",
+            "content": {
+              "application/json": {
+                "schema": {
+                  "type": "object",
+                  "properties": {
+                    "data": {
+                      "type": "object",
+                      "properties": {
+                        "confirmation_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "status": {
+                          "type": "string",
+                          "enum": [
+                            "accepted",
+                            "duplicate"
+                          ]
+                        },
+                        "inventory_receiving_changed": {
+                          "type": "boolean"
+                        }
+                      }
+                    },
+                    "meta": {
+                      "type": "object",
+                      "properties": {
+                        "request_id": {
+                          "type": "string",
+                          "format": "uuid"
+                        },
+                        "server_time": {
+                          "type": "string",
+                          "format": "date-time"
+                        }
+                      },
+                      "required": [
+                        "request_id"
+                      ]
+                    }
+                  },
+                  "required": [
+                    "data",
+                    "meta"
+                  ]
+                }
+              }
+            }
+          },
+          "default": {
+            "description": "JSON error. 401: sign in again; 409: reconcile conflict; 429: keep queue and honor Retry-After; 500/503: retry safely.",
+            "headers": {
+              "Retry-After": {
+                "description": "Seconds before retrying a rate-limited request.",
+                "schema": {
+                  "type": "integer"
+                }
+              }
+            },
+            "content": {
+              "application/json": {
+                "schema": {
+                  "$ref": "#/components/schemas/Error"
+                }
+              }
+            }
+          }
+        },
+        "requestBody": {
+          "required": true,
+          "content": {
+            "application/json": {
+              "schema": {
+                "$ref": "#/components/schemas/Confirmation"
+              }
+            }
+          }
+        }
+      }
+    }
+  },
+  "components": {
+    "securitySchemes": {
+      "bearerAuth": {
+        "type": "http",
+        "scheme": "bearer",
+        "description": "24-hour opaque device-bound token; keep in native secure storage."
+      }
+    },
+    "schemas": {
+      "Error": {
+        "type": "object",
+        "properties": {
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            },
+            "required": [
+              "code",
+              "message"
+            ]
+          },
+          "meta": {
+            "type": "object",
+            "properties": {
+              "request_id": {
+                "type": "string",
+                "format": "uuid"
+              },
+              "server_time": {
+                "type": "string",
+                "format": "date-time"
+              }
+            },
+            "required": [
+              "request_id"
+            ]
+          }
+        },
+        "required": [
+          "error",
+          "meta"
+        ]
+      },
+      "Login": {
+        "type": "object",
+        "properties": {
+          "username": {
+            "type": "string",
+            "maxLength": 100
+          },
+          "password": {
+            "type": "string",
+            "format": "password",
+            "maxLength": 4096
+          },
+          "device_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "device_name": {
+            "type": "string",
+            "maxLength": 100
+          }
+        },
+        "required": [
+          "username",
+          "password",
+          "device_id",
+          "device_name"
+        ]
+      },
+      "Token": {
+        "type": "object",
+        "properties": {
+          "access_token": {
+            "type": "string"
+          },
+          "token_type": {
+            "type": "string",
+            "enum": [
+              "Bearer"
+            ]
+          },
+          "expires_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "device_id": {
+            "type": "string",
+            "format": "uuid"
+          }
+        },
+        "required": [
+          "access_token",
+          "token_type",
+          "expires_at",
+          "device_id"
+        ]
+      },
+      "Location": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "name": {
+            "type": "string"
+          },
+          "address": {
+            "type": "string"
+          },
+          "latitude": {
+            "type": "number",
+            "nullable": true,
+            "minimum": -90,
+            "maximum": 90
+          },
+          "longitude": {
+            "type": "number",
+            "nullable": true,
+            "minimum": -180,
+            "maximum": 180
+          },
+          "coordinates_valid": {
+            "type": "boolean"
+          }
+        },
+        "required": [
+          "id",
+          "name",
+          "coordinates_valid"
+        ]
+      },
+      "TripHeader": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "trip_number": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "confirmed",
+              "in_progress",
+              "returned",
+              "closed",
+              "cancelled"
+            ]
+          },
+          "plan_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "planned_departure": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "driver": {
+            "type": "object",
+            "properties": {
+              "employee_id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "name": {
+                "type": "string"
+              }
+            }
+          },
+          "vehicle": {
+            "type": "object",
+            "properties": {
+              "id": {
+                "type": "integer",
+                "minimum": 1
+              },
+              "plate_number": {
+                "type": "string"
+              }
+            }
+          },
+          "origin_location_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "return_location_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "instructions": {
+            "type": "string"
+          }
+        },
+        "required": [
+          "id",
+          "status",
+          "plan_version"
+        ]
+      },
+      "Shipment": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "shipment_number": {
+            "type": "string"
+          },
+          "status": {
+            "type": "string"
+          },
+          "order_request_id": {
+            "type": "integer",
+            "minimum": 1,
+            "nullable": true
+          },
+          "inventory_return_id": {
+            "type": "integer",
+            "minimum": 1,
+            "nullable": true
+          },
+          "movement_type": {
+            "type": "string"
+          },
+          "order_reference": {
+            "type": "string",
+            "nullable": true
+          },
+          "delivery_number": {
+            "type": "string",
+            "nullable": true
+          },
+          "confirmation_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "items": {
+            "type": "array",
+            "items": {
+              "type": "object",
+              "properties": {
+                "line_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "item_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "name": {
+                  "type": "string"
+                },
+                "quantity": {
+                  "type": "number"
+                },
+                "uom_id": {
+                  "type": "integer",
+                  "minimum": 1
+                },
+                "uom_code": {
+                  "type": "string",
+                  "nullable": true
+                },
+                "asset_id": {
+                  "type": "integer",
+                  "minimum": 1,
+                  "nullable": true
+                }
+              }
+            }
+          }
+        }
+      },
+      "Stop": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "pending",
+              "arrived",
+              "departed",
+              "skipped"
+            ]
+          },
+          "location": {
+            "$ref": "#/components/schemas/Location"
+          },
+          "shipments": {
+            "type": "array",
+            "items": {
+              "$ref": "#/components/schemas/Shipment"
+            }
+          }
+        }
+      },
+      "Manifest": {
+        "allOf": [
+          {
+            "$ref": "#/components/schemas/TripHeader"
+          },
+          {
+            "type": "object",
+            "properties": {
+              "origin": {
+                "$ref": "#/components/schemas/Location"
+              },
+              "tracking_device_id": {
+                "type": "string",
+                "format": "uuid",
+                "nullable": true
+              },
+              "last_event_sequence": {
+                "type": "integer",
+                "minimum": 0
+              },
+              "stops": {
+                "type": "array",
+                "items": {
+                  "$ref": "#/components/schemas/Stop"
+                }
+              }
+            }
+          }
+        ]
+      },
+      "TripEvent": {
+        "type": "object",
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "client_sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "plan_version": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "type": {
+            "type": "string",
+            "enum": [
+              "trip.started",
+              "stop.arrived",
+              "stop.departed",
+              "stop.skipped",
+              "stop.issue_reported",
+              "trip.returned"
+            ]
+          },
+          "stop_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "payload": {
+            "type": "object",
+            "properties": {
+              "last_gps_sequence": {
+                "type": "integer",
+                "minimum": 0,
+                "maximum": 2147483647,
+                "description": "Required for trip.returned. Closure waits until every sequence through this checkpoint has synchronized."
+              },
+              "notes": {
+                "type": "string",
+                "maxLength": 1000
+              }
+            }
+          }
+        },
+        "required": [
+          "event_id",
+          "client_sequence",
+          "plan_version",
+          "type",
+          "occurred_at"
+        ]
+      },
+      "EventBatch": {
+        "type": "object",
+        "properties": {
+          "events": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 100,
+            "items": {
+              "$ref": "#/components/schemas/TripEvent"
+            }
+          }
+        },
+        "required": [
+          "events"
+        ]
+      },
+      "GPSPoint": {
+        "type": "object",
+        "properties": {
+          "sequence": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "latitude": {
+            "type": "number",
+            "minimum": -90,
+            "maximum": 90
+          },
+          "longitude": {
+            "type": "number",
+            "minimum": -180,
+            "maximum": 180
+          },
+          "accuracy_m": {
+            "type": "number",
+            "minimum": 0,
+            "maximum": 10000
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          }
+        },
+        "required": [
+          "sequence",
+          "latitude",
+          "longitude",
+          "accuracy_m",
+          "occurred_at"
+        ]
+      },
+      "GPSBatch": {
+        "type": "object",
+        "properties": {
+          "points": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 500,
+            "items": {
+              "$ref": "#/components/schemas/GPSPoint"
+            }
+          }
+        },
+        "required": [
+          "points"
+        ]
+      },
+      "SyncResult": {
+        "type": "object",
+        "properties": {
+          "event_id": {
+            "type": "string",
+            "format": "uuid",
+            "nullable": true
+          },
+          "sequence": {
+            "type": "integer",
+            "minimum": 1,
+            "nullable": true
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "duplicate",
+              "rejected"
+            ]
+          },
+          "record_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "error": {
+            "type": "object",
+            "properties": {
+              "code": {
+                "type": "string"
+              },
+              "message": {
+                "type": "string"
+              },
+              "details": {
+                "type": "object",
+                "additionalProperties": true
+              }
+            }
+          }
+        },
+        "required": [
+          "status"
+        ]
+      },
+      "EvidenceUpload": {
+        "type": "object",
+        "properties": {
+          "trip_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "evidence_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "file": {
+            "type": "string",
+            "format": "binary",
+            "description": "JPEG or PNG; <=8 MB, <=20 megapixels. Filename is ignored."
+          }
+        },
+        "required": [
+          "trip_id",
+          "evidence_id",
+          "file"
+        ]
+      },
+      "EvidenceResult": {
+        "type": "object",
+        "properties": {
+          "id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "evidence_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "status": {
+            "type": "string",
+            "enum": [
+              "accepted",
+              "duplicate"
+            ]
+          }
+        },
+        "required": [
+          "id",
+          "evidence_id",
+          "status"
+        ]
+      },
+      "Confirmation": {
+        "type": "object",
+        "properties": {
+          "confirmation_id": {
+            "type": "string",
+            "format": "uuid"
+          },
+          "trip_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "stop_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "occurred_at": {
+            "type": "string",
+            "format": "date-time"
+          },
+          "logistics_name": {
+            "type": "string",
+            "maxLength": 150
+          },
+          "logistics_role": {
+            "type": "string",
+            "enum": [
+              "driver",
+              "logistics_staff"
+            ]
+          },
+          "recipient_name": {
+            "type": "string",
+            "maxLength": 150
+          },
+          "recipient_role": {
+            "type": "string",
+            "enum": [
+              "supervisor",
+              "cashier"
+            ]
+          },
+          "logistics_signature_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "recipient_signature_id": {
+            "type": "integer",
+            "minimum": 1
+          },
+          "photo_ids": {
+            "type": "array",
+            "minItems": 1,
+            "maxItems": 3,
+            "uniqueItems": true,
+            "items": {
+              "type": "integer",
+              "minimum": 1
+            }
+          },
+          "notes": {
+            "type": "string",
+            "maxLength": 2000
+          }
+        },
+        "required": [
+          "confirmation_id",
+          "trip_id",
+          "stop_id",
+          "occurred_at",
+          "logistics_name",
+          "logistics_role",
+          "recipient_name",
+          "recipient_role",
+          "logistics_signature_id",
+          "recipient_signature_id",
+          "photo_ids"
+        ]
+      }
+    }
+  }
+}

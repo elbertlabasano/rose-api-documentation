@@ -8,7 +8,7 @@ See [setup.md](setup.md) for local PHP and Apache/XAMPP setup instructions and h
 
 For local use, run `php -S localhost:8080 gateway.php` and open <http://localhost:8080/index.html>; no documentation password is required for loopback requests. For local Apache, copy `.htaccess.example` to `.htaccess` and set `DOCS_ENV local`. Production Apache defaults to requiring HTTP Basic Authentication, including direct requests to either OpenAPI JSON file. Follow [setup.md](setup.md) to configure a production bcrypt password file outside the web root and keep `DOCS_ENV production`. API bearer tokens in Swagger remain separate from the documentation login.
 
-Deploy `index.html`, `openapi.json`, `itsupporthub.openapi.json`, `sms.openapi.json`, `storage.openapi.json`, `esigned-sso-setup.html`, `esigned-sso-setup.md`, and `gateway.php`. On initial Apache setup, copy `.htaccess.example` to `.htaccess` and configure your own absolute password file path. The local `.htaccess` is ignored by Git; the example is shared. Enable Apache's rewrite/env modules and `.htaccess` overrides as described in setup.md. Use HTTPS for deployed documentation. PHP 8.1+ is required. Previous static Python/Node preview commands do not enforce authentication and have been removed.
+Deploy `index.html`, `openapi.json`, `itsupporthub.openapi.json`, `sms.openapi.json`, `storage.openapi.json`, `wips.openapi.json`, `wips-api-guide.md`, `esigned-sso-setup.html`, `esigned-sso-setup.md`, and `gateway.php`. On initial Apache setup, copy `.htaccess.example` to `.htaccess` and configure your own absolute password file path. The local `.htaccess` is ignored by Git; the example is shared. Enable Apache's rewrite/env modules and `.htaccess` overrides as described in setup.md. Use HTTPS for deployed documentation. PHP 8.1+ is required. Previous static Python/Node preview commands do not enforce authentication and have been removed.
 
 ## Multiple APIs and Support Hub tickets
 
@@ -201,3 +201,11 @@ POST `/sms` also accepts `source`, `sourceId`, and `sourceRequestType`. These ar
 ```
 
 Each metadata field is optional and nullable. Non-null values must be strings with non-whitespace content: source/sourceRequestType allow up to 100 Unicode code points; sourceId allows 200. Quote numeric IDs as strings. Values are stored unchanged. The POST and status responses return the same camelCase fields, defaulting to null. Multiple messages can reference one source record; requestId remains globally unique. Retrying the same requestId with different metadata returns 409; omitted and null metadata are equivalent. The device WebSocket command remains unchanged and does not include this metadata. Existing gateway installations need the source-column migration described in that project's README before deploying the updated server; no migration was run for this documentation change.
+
+## WIPS global mobile API
+
+Select **WIPS - Global Mobile API** in the definition dropdown. `wips.openapi.json` is imported from the JSON-formatted `wips/docs/api/openapi.yaml`, preserving its 15 operations and schemas. Production base URL is `https://wips.ph/api/v1`; the prefix is included in the server URL, not repeated in each path. This is separate from the WIPS Storage definition.
+
+Read [the WIPS API usage guide](wips-api-guide.md) for setup, mobile synchronization order and default rate limits. Log in with WIPS `username`, `password`, installation UUID `device_id`, and `device_name`. Paste the returned device-bound bearer token into Swagger Authorize. Use the same event IDs, sequences and payloads for retries; honor Retry-After for 429 responses. Photos/signatures use multipart uploads, and delivery confirmations reference the numeric evidence IDs returned by uploads. Trip tracking and proof do not perform ERP dispatch, inventory receiving or stock movement.
+
+Both the imported contract and guide follow the existing documentation authentication rules. No live WIPS authentication, tracking events, uploads or confirmations were performed, and source-project tests were not run as part of importing the documentation.

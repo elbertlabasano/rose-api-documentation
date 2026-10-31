@@ -73,7 +73,7 @@ php -S localhost:8080 gateway.php
 
 ## Required files
 
-Keep these nine files together in the served directory:
+Keep these eleven files together in the served directory:
 
 ```text
 index.html
@@ -81,6 +81,8 @@ openapi.json
 itsupporthub.openapi.json
 sms.openapi.json
 storage.openapi.json
+wips.openapi.json
+wips-api-guide.md
 esigned-sso-setup.html
 esigned-sso-setup.md
 gateway.php
@@ -118,9 +120,11 @@ Paste tokens without the `Bearer` prefix. Click **Try it out** and **Execute** o
 - **Production documentation loads without a password:** Confirm `DOCS_ENV` is `production` and check that `.htaccess` is enabled on Apache or `gateway.php` is used with the PHP development server. Test in a private browser window and request `openapi.json` directly too; unauthenticated requests must return 401.
 - **Apache returns 500:** Check the error log for disabled rewrite/env modules or disallowed `.htaccess` directives.
 - **Blank Swagger page:** Check internet access and the browser console for blocked CDN scripts or styles.
-- **Failed to load API definition:** Keep the nine required files in the same directory. Check that `/openapi.json` and `/itsupporthub.openapi.json` load under the same local folder URL as `index.html`.
+- **Failed to load API definition:** Keep the eleven required files in the same directory. Check that `/openapi.json` and `/itsupporthub.openapi.json` load under the same local folder URL as `index.html`.
 - **Failed to fetch / CORS error when executing:** The API server must allow requests from your local documentation origin. Serving Swagger locally does not bypass CORS. Use Postman or a trusted backend if browser requests are not allowed.
 - **401 or 403:** Check the token for the selected API, its expiry, and its permissions.
 - **Support Hub returns 422:** Review the returned validation errors and confirm requester details and active department/category/board IDs.
 
 To point documentation at an existing development API, change `servers[].url` in the relevant specification. This only changes the request destination; starting a local Keycloak or Support Hub application requires that application's own source code and setup.
+
+For the WIPS mobile API, select **WIPS - Global Mobile API**, log in with WIPS credentials and installation UUID, then authorize with its returned token. See [wips-api-guide.md](wips-api-guide.md) for the required offline event, GPS, evidence and confirmation sequence.
